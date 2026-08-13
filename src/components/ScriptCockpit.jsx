@@ -5,14 +5,14 @@ import {
 import { S, slug, scriptKey, generateScript, nameOf, normalizeSegments, updateScriptMeta } from "../utils/helpers.js";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import CallCockpit from "./CallCockpit.jsx";
-import { createShareLink } from "../api/client.js";
+import { createShareLink, updateScript } from "../api/client.js";
 import ScriptComments from "./ScriptComments.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   Play, Pause, RotateCcw, Phone, Mic, ChevronRight,
   MoreHorizontal, Copy, Printer, Share2, FileText,
   CheckCircle2, AlertTriangle, Clock, Volume2, Globe,
-  Sparkles
+  Sparkles, Pencil, Plus, X, Trash2, Check
 } from "lucide-react";
 
 /* ============================================================
@@ -56,6 +56,42 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   useOutsideClick(menuRef, () => setMenuOpen(false));
+
+  // Inline editing
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editScript, setEditScript] = useState(null);
+
+  const startEditing = () => {
+    setEditScript(JSON.parse(JSON.stringify(primaryScript)));
+    setEditing(true);
+  };
+  const cancelEditing = () => {
+    setEditScript(null);
+    setEditing(false);
+  };
+  const saveEdits = async () => {
+    if (!editScript || !script?.id) return;
+    setSaving(true);
+    try {
+      await updateScript(script.id, {
+        opening: editScript.opening,
+        tone_level: editScript.toneLevel,
+        tone_guidance: editScript.toneGuidance,
+        segments: editScript.segments,
+        objections: editScript.objections,
+      });
+      // Update local state
+      setLangScripts((prev) => ({ ...prev, [primaryLang]: { ...prev[primaryLang], ...editScript } }));
+      setEditing(false);
+      setEditScript(null);
+    } catch (e) {
+      console.error("Save failed:", e);
+      alert("Failed to save changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // load saved outcome/notes/used_at
   useEffect(() => {
@@ -257,6 +293,15 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           </div>
         </div>
         <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
+          {!editing && <button className="ps-btn ghost sm" onClick={startEditing}><Pencil size={14} /> Edit</button>}
+          {editing && (
+            <>
+              <button className="ps-btn pri sm" onClick={saveEdits} disabled={saving}>
+                {saving ? <><span className="spinner" /> Saving…</> : <><Check size={14} /> Save</>}
+              </button>
+              <button className="ps-btn ghost sm" onClick={cancelEditing} disabled={saving}>Cancel</button>
+            </>
+          )}
           <button className="ps-btn ghost sm" onClick={onChangeSetup}>Change setup</button>
           <button className="ps-btn ghost sm" onClick={() => setConfirmRegen(true)}>↻ Regenerate</button>
           <button className="ps-btn pri" onClick={() => setCallMode(true)}>
@@ -327,11 +372,45 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                         </span>
                       )}
                     </div>
-                    <div className="opening">"{s.opening}"</div>
+                    <div className="opening">
+                      {editing ? (
+                        <textarea
+                          className="finp"
+                          value={editScript.opening || ""}
+                          onChange={(e) => setEditScript({ ...editScript, opening: e.target.value })}
+                          style={{ width: "100%", minHeight: 48, fontSize: 17, lineHeight: 1.4, fontFamily: "'Space Grotesk'" }}
+                        />
+                      ) : (
+                        <>"{s.opening}"</>
+                      )}
+                    </div>
                     {lid === primaryLang && (
                       <div className="tone-line">
-                        <span className="tone-badge" style={{ background: TONE_COLOR[s.toneLevel] || "var(--assertive)" }}>{s.toneLevel || method.tone} tone</span>
-                        <span className="tone-guide">{s.toneGuidance}</span>
+                        <span className="tone-badge" style={{ background: TONE_COLOR[editing ? editScript.toneLevel : s.toneLevel] || "var(--assertive)" }}>
+                          {editing ? (
+                            <select
+                              value={editScript.toneLevel || "Assertive"}
+                              onChange={(e) => setEditScript({ ...editScript, toneLevel: e.target.value })}
+                              style={{ background: "transparent", border: "none", color: "inherit", fontSize: "inherit", fontWeight: "inherit", cursor: "pointer" }}
+                            >
+                              {["Consultative", "Assertive", "Aggressive", "Methodical"].map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <>{s.toneLevel || method.tone} tone</>
+                          )}
+                        </span>
+                        {editing ? (
+                          <input
+                            className="finp"
+                            value={editScript.toneGuidance || ""}
+                            onChange={(e) => setEditScript({ ...editScript, toneGuidance: e.target.value })}
+                            style={{ flex: 1, fontSize: 13, minWidth: 0 }}
+                          />
+                        ) : (
+                          <span className="tone-guide">{s.toneGuidance}</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -414,59 +493,139 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                         return (
                           <div key={lid} className="seg-col">
                             {multi && <div className="seg-col-lang">{lang.name}</div>}
-                            {seg.goal && (
-                              <div className="seg-goal">
-                                <span className="coach-tag">Goal</span>{seg.goal}
-                              </div>
-                            )}
-                            {/* SAY THIS — dominant */}
-                            {seg.say?.length > 0 && (
-                              <div className="say-block">
-                                <div className="say-head">Say this</div>
-                                {seg.say.map((t, j) => {
-                                  const id = `say-${lid}-${i}-${j}`;
-                                  return (
-                                    <div key={id} className={`speak-item ${checks[id] ? "checked" : ""}`} onClick={() => toggleCheck(id)}>
-                                      <div className={`ck ${checks[id] ? "on" : ""}`}>{checks[id] ? "✓" : ""}</div>
-                                      <span>{t}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {seg.ask?.length > 0 && (
-                              <div className="say-block">
-                                <div className="say-head ask">Ask this</div>
-                                {seg.ask.map((t, j) => {
-                                  const id = `ask-${lid}-${i}-${j}`;
-                                  return (
-                                    <div key={id} className={`speak-item q ${checks[id] ? "checked" : ""}`} onClick={() => toggleCheck(id)}>
-                                      <div className={`ck ${checks[id] ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleCheck(id); }}>✓</div>
-                                      <span className="qmark">Q</span><span>{t}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {/* LISTEN FOR */}
-                            {seg.listenFor?.length > 0 && (
-                              <div className="listen-block">
-                                <div className="listen-head">Listen for</div>
-                                {seg.listenFor.map((t, j) => (
-                                  <div key={`lf-${lid}-${i}-${j}`} className="listen-item">
-                                    <span className="listen-dot" />{t}
+                            {editing && lid === primaryLang ? (
+                              /* ========== EDIT MODE (primary lang only) ========== */
+                              <>
+                                {/* Segment label */}
+                                <div style={{ marginBottom: 8 }}>
+                                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Segment label</label>
+                                  <input className="finp" value={editScript.segments[i]?.label || ""} onChange={(e) => {
+                                    const segs = [...editScript.segments]; segs[i] = { ...segs[i], label: e.target.value }; setEditScript({ ...editScript, segments: segs });
+                                  }} style={{ width: "100%", fontSize: 14 }} />
+                                </div>
+                                {/* Goal */}
+                                <div style={{ marginBottom: 8 }}>
+                                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Goal</label>
+                                  <input className="finp" value={editScript.segments[i]?.goal || ""} onChange={(e) => {
+                                    const segs = [...editScript.segments]; segs[i] = { ...segs[i], goal: e.target.value }; setEditScript({ ...editScript, segments: segs });
+                                  }} style={{ width: "100%", fontSize: 14 }} />
+                                </div>
+                                {/* SAY THIS */}
+                                <div className="say-block" style={{ marginBottom: 12 }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div className="say-head">Say this</div>
+                                    <button className="edit-add-btn" onClick={() => {
+                                      const segs = [...editScript.segments]; segs[i] = { ...segs[i], say: [...(segs[i].say || []), ""] }; setEditScript({ ...editScript, segments: segs });
+                                    }}><Plus size={13} /> Add</button>
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                            {/* COACHING — secondary */}
-                            {seg.do?.length > 0 && (
-                              <div className="coach-block">
-                                <div className="coach-head">Coaching — don't say aloud</div>
-                                {seg.do.map((t, j) => (
-                                  <div key={`do-${lid}-${i}-${j}`} className="coach-note"><span className="coach-dot" />{t}</div>
-                                ))}
-                              </div>
+                                  {(editScript.segments[i]?.say || []).map((t, j) => (
+                                    <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                                      <input className="finp" value={t} onChange={(e) => {
+                                        const segs = [...editScript.segments]; const say = [...segs[i].say]; say[j] = e.target.value; segs[i] = { ...segs[i], say }; setEditScript({ ...editScript, segments: segs });
+                                      }} style={{ flex: 1, fontSize: 14 }} />
+                                      <button className="edit-del-btn" onClick={() => {
+                                        const segs = [...editScript.segments]; const say = segs[i].say.filter((_, k) => k !== j); segs[i] = { ...segs[i], say }; setEditScript({ ...editScript, segments: segs });
+                                      }}><Trash2 size={14} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* ASK THIS */}
+                                <div className="say-block" style={{ marginBottom: 12 }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div className="say-head ask">Ask this</div>
+                                    <button className="edit-add-btn" onClick={() => {
+                                      const segs = [...editScript.segments]; segs[i] = { ...segs[i], ask: [...(segs[i].ask || []), ""] }; setEditScript({ ...editScript, segments: segs });
+                                    }}><Plus size={13} /> Add</button>
+                                  </div>
+                                  {(editScript.segments[i]?.ask || []).map((t, j) => (
+                                    <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                                      <input className="finp" value={t} onChange={(e) => {
+                                        const segs = [...editScript.segments]; const ask = [...segs[i].ask]; ask[j] = e.target.value; segs[i] = { ...segs[i], ask }; setEditScript({ ...editScript, segments: segs });
+                                      }} style={{ flex: 1, fontSize: 14 }} />
+                                      <button className="edit-del-btn" onClick={() => {
+                                        const segs = [...editScript.segments]; const ask = segs[i].ask.filter((_, k) => k !== j); segs[i] = { ...segs[i], ask }; setEditScript({ ...editScript, segments: segs });
+                                      }}><Trash2 size={14} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* COACHING */}
+                                <div className="coach-block" style={{ marginBottom: 12 }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div className="coach-head">Coaching — don't say aloud</div>
+                                    <button className="edit-add-btn" onClick={() => {
+                                      const segs = [...editScript.segments]; segs[i] = { ...segs[i], do: [...(segs[i].do || []), ""] }; setEditScript({ ...editScript, segments: segs });
+                                    }}><Plus size={13} /> Add</button>
+                                  </div>
+                                  {(editScript.segments[i]?.do || []).map((t, j) => (
+                                    <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
+                                      <input className="finp" value={t} onChange={(e) => {
+                                        const segs = [...editScript.segments]; const doArr = [...segs[i].do]; doArr[j] = e.target.value; segs[i] = { ...segs[i], do: doArr }; setEditScript({ ...editScript, segments: segs });
+                                      }} style={{ flex: 1, fontSize: 13, fontStyle: "italic" }} />
+                                      <button className="edit-del-btn" onClick={() => {
+                                        const segs = [...editScript.segments]; const doArr = segs[i].do.filter((_, k) => k !== j); segs[i] = { ...segs[i], do: doArr }; setEditScript({ ...editScript, segments: segs });
+                                      }}><Trash2 size={14} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            ) : (
+                              /* ========== VIEW MODE ========== */
+                              <>
+                                {seg.goal && (
+                                  <div className="seg-goal">
+                                    <span className="coach-tag">Goal</span>{seg.goal}
+                                  </div>
+                                )}
+                                {/* SAY THIS — dominant */}
+                                {seg.say?.length > 0 && (
+                                  <div className="say-block">
+                                    <div className="say-head">Say this</div>
+                                    {seg.say.map((t, j) => {
+                                      const id = `say-${lid}-${i}-${j}`;
+                                      return (
+                                        <div key={id} className={`speak-item ${checks[id] ? "checked" : ""}`} onClick={() => toggleCheck(id)}>
+                                          <div className={`ck ${checks[id] ? "on" : ""}`}>{checks[id] ? "✓" : ""}</div>
+                                          <span>{t}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {seg.ask?.length > 0 && (
+                                  <div className="say-block">
+                                    <div className="say-head ask">Ask this</div>
+                                    {seg.ask.map((t, j) => {
+                                      const id = `ask-${lid}-${i}-${j}`;
+                                      return (
+                                        <div key={id} className={`speak-item q ${checks[id] ? "checked" : ""}`} onClick={() => toggleCheck(id)}>
+                                          <div className={`ck ${checks[id] ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleCheck(id); }}>✓</div>
+                                          <span className="qmark">Q</span><span>{t}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {/* LISTEN FOR */}
+                                {seg.listenFor?.length > 0 && (
+                                  <div className="listen-block">
+                                    <div className="listen-head">Listen for</div>
+                                    {seg.listenFor.map((t, j) => (
+                                      <div key={`lf-${lid}-${i}-${j}`} className="listen-item">
+                                        <span className="listen-dot" />{t}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* COACHING — secondary */}
+                                {seg.do?.length > 0 && (
+                                  <div className="coach-block">
+                                    <div className="coach-head">Coaching — don't say aloud</div>
+                                    {seg.do.map((t, j) => (
+                                      <div key={`do-${lid}-${i}-${j}`} className="coach-note"><span className="coach-dot" />{t}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         );
@@ -478,7 +637,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             })}
           </div>
 
-          <ObjectionPanel objections={primaryScript.objections || []} />
+          <ObjectionPanel objections={primaryScript.objections || []} editing={editing} editScript={editScript} setEditScript={setEditScript} />
 
           {/* Outcome tracking */}
           <div className="ps-card" style={{ marginTop: 20 }}>
@@ -619,42 +778,73 @@ function PrintView({ product, method, callType, duration, script, meta }) {
   );
 }
 
-function ObjectionPanel({ objections }) {
+function ObjectionPanel({ objections, editing, editScript, setEditScript }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(null);
   const [showAll, setShowAll] = useState(false);
   const filtered = objections.filter((o) => (o.objection + " " + o.response).toLowerCase().includes(q.toLowerCase()));
   const visible = showAll ? filtered : filtered.slice(0, 5);
+
+  // Edit mode: show editScript.objections or regular objections
+  const items = editing ? (editScript?.objections || []) : visible;
+
   return (
     <div className="obj-panel">
       <div className="obj-head">
         <div className="t">⚡ Objection handling</div>
-        <div className="s">Tap an objection to see how to respond, in this method's style.</div>
-        <input className="obj-search" placeholder="Search objections…" value={q} onChange={(e) => setQ(e.target.value)} />
+        {!editing && <div className="s">Tap an objection to see how to respond, in this method's style.</div>}
+        {!editing && <input className="obj-search" placeholder="Search objections…" value={q} onChange={(e) => setQ(e.target.value)} />}
       </div>
+      {editing && (
+        <button className="edit-add-btn" style={{ margin: "8px 16px" }} onClick={() => {
+          setEditScript({ ...editScript, objections: [...(editScript.objections || []), { objection: "", response: "" }] });
+        }}><Plus size={13} /> Add objection</button>
+      )}
       <div className="obj-list">
-        {filtered.length === 0 && <div style={{ padding: 20, color: "var(--faint)", fontSize: 13, textAlign: "center" }}>No matches.</div>}
-        {visible.map((o, i) => (
+        {!editing && filtered.length === 0 && <div style={{ padding: 20, color: "var(--faint)", fontSize: 13, textAlign: "center" }}>No matches.</div>}
+        {items.map((o, i) => (
           <div key={i} className={`obj ${open === i ? "open" : ""}`}>
-            <div className="obj-q" onClick={() => setOpen(open === i ? null : i)}>
-              <span className="q">“</span><span style={{ flex: 1 }}>{o.objection}</span><span style={{ color: "var(--faint)" }}>{open === i ? "▲" : "▼"}</span>
-            </div>
-            {open === i && (
-              <div className="obj-a">
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>Respond</div>
-                  <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--ink)" }}>{o.response}</div>
+            {editing ? (
+              <div style={{ padding: "12px 16px" }}>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Objection</label>
+                  <input className="finp" value={o.objection || ""} onChange={(e) => {
+                    const objs = [...editScript.objections]; objs[i] = { ...objs[i], objection: e.target.value }; setEditScript({ ...editScript, objections: objs });
+                  }} style={{ width: "100%", fontSize: 13 }} />
                 </div>
-                {o.coaching && (
-                  <div style={{ padding: 10, background: "var(--instr-bg)", borderLeft: "3px solid var(--instr-line)", borderRadius: "0 8px 8px 0", fontSize: 12.5, color: "var(--instr)", fontStyle: "italic" }}>
-                    <b style={{ color: "var(--ink)", fontStyle: "normal" }}>Coaching:</b> {o.coaching}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Response</label>
+                  <textarea className="finp" value={o.response || ""} onChange={(e) => {
+                    const objs = [...editScript.objections]; objs[i] = { ...objs[i], response: e.target.value }; setEditScript({ ...editScript, objections: objs });
+                  }} style={{ width: "100%", fontSize: 13, minHeight: 48, resize: "vertical" }} />
+                </div>
+                <button className="edit-del-btn" onClick={() => {
+                  setEditScript({ ...editScript, objections: editScript.objections.filter((_, k) => k !== i) });
+                }}><Trash2 size={14} style={{ marginRight: 4 }} /> Remove objection</button>
+              </div>
+            ) : (
+              <>
+                <div className="obj-q" onClick={() => setOpen(open === i ? null : i)}>
+                  <span className="q">"</span><span style={{ flex: 1 }}>{o.objection}</span><span style={{ color: "var(--faint)" }}>{open === i ? "▲" : "▼"}</span>
+                </div>
+                {open === i && (
+                  <div className="obj-a">
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>Respond</div>
+                      <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--ink)" }}>{o.response}</div>
+                    </div>
+                    {o.coaching && (
+                      <div style={{ padding: 10, background: "var(--instr-bg)", borderLeft: "3px solid var(--instr-line)", borderRadius: "0 8px 8px 0", fontSize: 12.5, color: "var(--instr)", fontStyle: "italic" }}>
+                        <b style={{ color: "var(--ink)", fontStyle: "normal" }}>Coaching:</b> {o.coaching}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         ))}
-        {!showAll && filtered.length > 5 && (
+        {!editing && !showAll && filtered.length > 5 && (
           <button className="obj-more" onClick={() => setShowAll(true)}>
             View all {filtered.length} objections →
           </button>

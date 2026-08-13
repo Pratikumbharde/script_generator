@@ -1213,7 +1213,7 @@ app.post('/api/scripts', requireAuth, (req, res) => {
 
 app.put('/api/scripts/:id', requireAuth, (req, res) => {
   const { id } = req.params
-  const { outcome, notes, used_at } = req.body
+  const { outcome, notes, used_at, opening, tone_level, tone_guidance, segments, objections } = req.body
   const existing = db.prepare('SELECT * FROM scripts WHERE id = ?').get(id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
 
@@ -1230,6 +1230,11 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
   if (outcome !== undefined) { updates.push('outcome = ?'); values.push(outcome) }
   if (notes !== undefined) { updates.push('notes = ?'); values.push(notes) }
   if (used_at !== undefined) { updates.push('used_at = ?'); values.push(used_at) }
+  if (opening !== undefined) { updates.push('opening = ?'); values.push(opening) }
+  if (tone_level !== undefined) { updates.push('tone_level = ?'); values.push(tone_level) }
+  if (tone_guidance !== undefined) { updates.push('tone_guidance = ?'); values.push(tone_guidance) }
+  if (segments !== undefined) { updates.push('segments_json = ?'); values.push(JSON.stringify(segments)) }
+  if (objections !== undefined) { updates.push('objections_json = ?'); values.push(JSON.stringify(objections)) }
   if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' })
 
   values.push(id)

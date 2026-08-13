@@ -1532,5 +1532,9 @@ export const STYLES = `
   .ds-diagnosis-grid{grid-template-columns:1fr}
   .ds-funnel-step{padding:6px 8px}
 }
+.edit-add-btn{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-border,#C6D9F0);border-radius:6px;padding:3px 8px;cursor:pointer;transition:.15s}
+.edit-add-btn:hover{background:var(--accent);color:#fff}
+.edit-del-btn{display:inline-flex;align-items:center;justify-content:center;background:none;border:1px solid #e8e8e8;border-radius:6px;padding:6px;color:#999;cursor:pointer;transition:.15s;flex-shrink:0}
+.edit-del-btn:hover{background:#fee;border-color:#f99;color:#c33}
 `;
 
