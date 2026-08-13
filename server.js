@@ -1176,7 +1176,7 @@ app.post('/api/scripts', requireAuth, (req, res) => {
 
   const result = db.prepare(
     `INSERT INTO scripts (user_id, workspace_id, visibility, product_id, method, call_type, duration, language, region, delivery, simple, persona, opening, tone_level, tone_guidance, segments_json, objections_json, saved_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, product_id, method, call_type, duration, language, region, delivery, simple, persona)
      DO UPDATE SET opening=excluded.opening, tone_level=excluded.tone_level, tone_guidance=excluded.tone_guidance, segments_json=excluded.segments_json, objections_json=excluded.objections_json, saved_at=excluded.saved_at`
   ).run(req.userId, wsId || null, visibility, product_id, method, call_type, duration, language, region, delivery, simple ? 1 : 0, persona || 'general', opening || '', tone_level || '', tone_guidance || '', segJson, objJson, saved_at || Date.now())
@@ -2237,7 +2237,7 @@ async function fetchAIModel(cfg, messages, stream = false) {
   } else {
     url = `${cfg.baseUrl}/api/chat`
     if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`
-    body = JSON.stringify({ model: cfg.model, messages, stream })
+    body = JSON.stringify({ model: cfg.model, messages, stream, think: false, options: { num_ctx: 16384, num_predict: 16384 } })
   }
 
   return fetch(url, { method: 'POST', headers, body })
@@ -2272,8 +2272,8 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      console.error(`[AI proxy] Upstream ${response.status} from ${url}:`, text)
-      return res.status(response.status).json({ error: text || `Service returned ${response.status}`, upstream_url: url, status: response.status })
+      console.error(`[AI proxy] Upstream ${response.status} from ${response.url}:`, text)
+      return res.status(response.status).json({ error: text || `Service returned ${response.status}`, upstream_url: response.url, status: response.status })
     }
 
     res.setHeader('Content-Type', 'text/event-stream')
@@ -4293,9 +4293,9 @@ app.get('/api/model-routing/logs', requireAuth, (req, res) => {
 /* ---------- start ---------- */
 /* ---------- Global error handler (Express 5 forwards async rejections here) ---------- */
 app.use((err, req, res, next) => {
-  console.error('[Express error]', err.message)
+  console.error('[Express error]', err.message, err.stack)
   if (res.headersSent) return next(err)
-  res.status(500).json({ error: 'Internal server error' })
+  res.status(500).json({ error: 'Internal server error', detail: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' ') })
 })
 
 app.listen(PORT, () => {

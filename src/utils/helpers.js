@@ -184,6 +184,8 @@ export async function callModel(system, prompt) {
         { role: "user", content: prompt },
       ],
       stream: false,
+      think: false,
+      options: { num_ctx: 16384, num_predict: 16384 },
     }),
   });
   if (!res.ok) throw new Error(`Generation service returned ${res.status}. Try again in a moment.`);
@@ -201,6 +203,8 @@ export async function callModelStream(system, prompt, onChunk) {
         { role: "user", content: prompt },
       ],
       stream: true,
+      think: false,
+      options: { num_ctx: 16384, num_predict: 16384 },
     }),
   });
   if (!res.ok) {
