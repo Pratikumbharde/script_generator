@@ -18,7 +18,8 @@ export const S = {
       const scripts = await listScripts();
       const rec = scripts.find((s) => (s.key || scriptKey(s.meta.productId, s.meta)) === key);
       if (rec) return {
-        data: rec.data,
+        id: rec.id,
+        data: { ...rec.data, id: rec.id },
         savedAt: rec.savedAt || rec.saved_at || 0,
         meta: rec.meta,
         outcome: rec.outcome || 'pending',

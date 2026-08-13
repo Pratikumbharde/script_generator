@@ -121,7 +121,11 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
         const langKey = scriptKey(product.id, langOpts);
         const meta = { productId: product.id, productName: product.name, method, callType, duration, language: lid, region, delivery, simple, persona: resolvedPersona };
         await S.set(langKey, { data, savedAt: Date.now(), meta });
-        if (lid === language) primaryData = data;
+        if (lid === language) {
+          // Re-fetch to get the DB id
+          const saved = await S.get(langKey);
+          primaryData = saved?.data || data;
+        }
       }
       // if the primary language wasn't in langs (edge case), keep whatever was last saved
       if (!primaryData) primaryData = await S.get(key).then((r) => r?.data);
