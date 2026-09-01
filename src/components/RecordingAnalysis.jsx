@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { S, nameOf, parseScriptKey, callModel } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES } from "../data/constants.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 /* ============================================================
    Call Recording Analysis (P3.3)
@@ -172,12 +174,12 @@ Analyze the call against the script.`;
               <>
                 <div className="frow">
                   <label className="flab">Recording link <span className="opt">(optional)</span></label>
-                  <input className="finp" placeholder="https://your-crm.com/call-recording/…" value={recordingUrl} onChange={(e) => setRecordingUrl(e.target.value)} />
+                  <LimitedInput className="finp" maxLength={500} placeholder="https://your-crm.com/call-recording/…" value={recordingUrl} onChange={(e) => setRecordingUrl(e.target.value)} />
                   <div className="fhint">Paste a link to the recording, or just describe the call below.</div>
                 </div>
                 <div className="frow">
                   <label className="flab">Call notes / transcript <span className="opt">(paste what you remember, or the transcript)</span></label>
-                  <textarea className="ftext" placeholder="What was said? What objections came up? Did the rep follow the script?" value={callNotes} onChange={(e) => setCallNotes(e.target.value)} />
+                  <LimitedTextarea className="ftext" maxLength={10000} placeholder="What was said? What objections came up? Did the rep follow the script?" value={callNotes} onChange={(e) => setCallNotes(e.target.value)} />
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button className="ps-btn pri" disabled={(!recordingUrl.trim() && !callNotes.trim()) || analyzing} onClick={analyze}>

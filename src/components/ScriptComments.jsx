@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { listScriptComments, createScriptComment, deleteScriptComment } from "../api/client.js";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 
 export default function ScriptComments({ scriptId, userEmail }) {
   const [comments, setComments] = useState([]);
@@ -92,13 +93,14 @@ export default function ScriptComments({ scriptId, userEmail }) {
         ))}
       </div>
 
-      <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--line-soft)" }}>
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line-soft)" }}>
         <div className="comment-input">
-          <textarea
+          <LimitedTextarea
             placeholder="Add feedback, approval, or revision note…"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey) submit(); }}
+            maxLength={2000}
           />
         </div>
         <div className="comment-actions">

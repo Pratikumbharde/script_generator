@@ -14,6 +14,8 @@ import {
   duplicateEmailTemplate,
   testSmtp,
 } from "../api/client.js";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 import {
   Cpu,
   CheckCircle2,
@@ -290,7 +292,7 @@ export default function SettingsView() {
             {/* Host */}
             <div>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>SMTP Host</label>
-              <input className="finp" type="text" placeholder="smtp.gmail.com" value={prefs.smtp_host || ""} onChange={(e) => savePrefs({ smtp_host: e.target.value })} />
+              <LimitedInput className="finp" maxLength={200} type="text" placeholder="smtp.gmail.com" value={prefs.smtp_host || ""} onChange={(e) => savePrefs({ smtp_host: e.target.value })} />
             </div>
             {/* Port */}
             <div>
@@ -300,7 +302,7 @@ export default function SettingsView() {
             {/* Username */}
             <div>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Username</label>
-              <input className="finp" type="text" placeholder="you@example.com" value={prefs.smtp_user || ""} onChange={(e) => savePrefs({ smtp_user: e.target.value })} />
+              <LimitedInput className="finp" maxLength={200} type="text" placeholder="you@example.com" value={prefs.smtp_user || ""} onChange={(e) => savePrefs({ smtp_user: e.target.value })} />
             </div>
             {/* Password */}
             <div>
@@ -310,7 +312,7 @@ export default function SettingsView() {
             {/* From Email */}
             <div>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>From Email</label>
-              <input className="finp" type="email" placeholder="no-reply@pitchstudio.app" value={prefs.smtp_from || ""} onChange={(e) => savePrefs({ smtp_from: e.target.value })} />
+              <LimitedInput className="finp" maxLength={200} type="email" placeholder="no-reply@pitchstudio.app" value={prefs.smtp_from || ""} onChange={(e) => savePrefs({ smtp_from: e.target.value })} />
             </div>
             {/* Secure toggle */}
             <div>
@@ -498,7 +500,7 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Account Name</label>
-              <input className="finp" type="text" placeholder="e.g. OpenAI Production" value={aiForm.name} onChange={(e) => setAiForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
+              <LimitedInput className="finp" maxLength={200} type="text" placeholder="e.g. OpenAI Production" value={aiForm.name} onChange={(e) => setAiForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Provider</label>
@@ -508,7 +510,7 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Model</label>
-              <input className="finp" type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.placeholder || "model-name"} value={aiForm.model} onChange={(e) => setAiForm((f) => ({ ...f, model: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={200} type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.placeholder || "model-name"} value={aiForm.model} onChange={(e) => setAiForm((f) => ({ ...f, model: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>API Key</label>
@@ -516,7 +518,7 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 18 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Base URL (optional)</label>
-              <input className="finp" type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.basePlaceholder || ""} value={aiForm.base_url} onChange={(e) => setAiForm((f) => ({ ...f, base_url: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={500} type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.basePlaceholder || ""} value={aiForm.base_url} onChange={(e) => setAiForm((f) => ({ ...f, base_url: e.target.value }))} />
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button className="ps-btn ghost" onClick={closeAiForm}>Cancel</button>
@@ -538,20 +540,21 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Template Name</label>
-              <input className="finp" type="text" placeholder="e.g. Weekly Digest" value={tplForm.name} onChange={(e) => setTplForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
+              <LimitedInput className="finp" maxLength={200} type="text" placeholder="e.g. Weekly Digest" value={tplForm.name} onChange={(e) => setTplForm((f) => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Slug (unique ID)</label>
-              <input className="finp" type="text" placeholder="e.g. weekly_digest" value={tplForm.slug} onChange={(e) => setTplForm((f) => ({ ...f, slug: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={100} type="text" placeholder="e.g. weekly_digest" value={tplForm.slug} onChange={(e) => setTplForm((f) => ({ ...f, slug: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Subject</label>
-              <input className="finp" type="text" placeholder="e.g. Your weekly performance digest" value={tplForm.subject} onChange={(e) => setTplForm((f) => ({ ...f, subject: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={300} type="text" placeholder="e.g. Your weekly performance digest" value={tplForm.subject} onChange={(e) => setTplForm((f) => ({ ...f, subject: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Body</label>
-              <textarea
+              <LimitedTextarea
                 className="ftext"
+                maxLength={10000}
                 rows={8}
                 placeholder={`Hi {{user_name}},\n\nYour weekly summary:\nScripts: {{scripts_count}}\nCalls: {{calls_made}}\n\n— {{company_name}} Team`}
                 value={tplForm.body}
@@ -564,11 +567,11 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Variables (JSON array, optional)</label>
-              <input className="finp" type="text" placeholder='["user_name", "company_name", "scripts_count"]' value={tplForm.variables} onChange={(e) => setTplForm((f) => ({ ...f, variables: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={500} type="text" placeholder='["user_name", "company_name", "scripts_count"]' value={tplForm.variables} onChange={(e) => setTplForm((f) => ({ ...f, variables: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Description (optional)</label>
-              <input className="finp" type="text" placeholder="Short note about when this template is used" value={tplForm.description} onChange={(e) => setTplForm((f) => ({ ...f, description: e.target.value }))} />
+              <LimitedInput className="finp" maxLength={300} type="text" placeholder="Short note about when this template is used" value={tplForm.description} onChange={(e) => setTplForm((f) => ({ ...f, description: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 18 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Status</label>

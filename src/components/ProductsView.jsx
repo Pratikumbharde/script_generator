@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import LimitedInput from "./shared/LimitedInput.jsx";
 import { listScripts } from "../api/client.js";
 import {
   Search, LayoutGrid, List, Trash2, Pencil, X,
@@ -177,15 +178,42 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
     useEffect(() => {
       if (open && btnRef.current) {
         const rect = btnRef.current.getBoundingClientRect();
+        const dropdownWidth = 180;
+        const dropdownPadding = 8;
+        // Prefer right-aligned, but shift left if it overflows
+        let left, right;
+        if (alignRight) {
+          right = window.innerWidth - rect.right;
+          left = undefined;
+          // If right-aligned dropdown would overflow left, shift right
+          if (window.innerWidth - right - dropdownWidth < dropdownPadding) {
+            right = dropdownPadding;
+          }
+        } else {
+          left = rect.left;
+          right = undefined;
+          // If left-aligned dropdown would overflow right, shift left
+          if (left + dropdownWidth > window.innerWidth - dropdownPadding) {
+            left = window.innerWidth - dropdownWidth - dropdownPadding;
+          }
+        }
+        // If dropdown would overflow bottom, open upward
+        const estimatedHeight = 200;
+        let top = rect.bottom + 4;
+        if (top + estimatedHeight > window.innerHeight - dropdownPadding) {
+          top = rect.top - estimatedHeight - 4;
+        }
         setPos({
-          top: rect.bottom + 4,
-          left: rect.left,
-          right: window.innerWidth - rect.right,
+          top: Math.max(dropdownPadding, top),
+          ...(right !== undefined ? { right } : { left }),
+          position: "fixed",
+          marginTop: 0,
+          zIndex: 100,
         });
       } else {
         setPos(null);
       }
-    }, [open]);
+    }, [open, alignRight]);
 
     return (
       <div className="dt-actions" ref={open ? menuRef : null}>
@@ -200,13 +228,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {open && pos && (
           <div
             className="dt-dropdown"
-            style={{
-              position: "fixed",
-              top: pos.top,
-              ...(alignRight ? { right: pos.right } : { left: pos.left }),
-              marginTop: 0,
-              zIndex: 100,
-            }}
+            style={pos}
           >
             <button className="dt-dropdown-item" onClick={(e) => { e.stopPropagation(); onOpen(p); setActiveMenu(null); }}>
               <Eye size={14} /> Open
@@ -410,7 +432,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
               <div style={{ fontWeight: 600, marginBottom: 3 }}>Name your workspace</div>
               <div style={{ color: "var(--muted)", fontSize: 13 }}>This is the company your team logs into. You can add staff under Team.</div>
             </div>
-            <input className="finp" style={{ maxWidth: 240 }} placeholder="e.g. Northwind Sales" value={name} onChange={(e) => setName(e.target.value)} />
+            <LimitedInput className="finp" style={{ maxWidth: 240 }} placeholder="e.g. Northwind Sales" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
             <button className="ps-btn pri" disabled={!name.trim()} onClick={() => onSetup(name.trim())}>Save</button>
           </div>
         )}

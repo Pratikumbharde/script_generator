@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import {
   listHeatmaps,
   generateHeatmaps,
@@ -921,12 +922,13 @@ export default function ConversationIntelligenceView() {
           <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
             Paste call transcripts to analyze phrases manually. For best results, use the automatic analysis which consumes your existing Call Studio data.
           </p>
-          <textarea
+          <LimitedTextarea
             className="ftext"
             rows={6}
             placeholder="Paste transcripts here, one per line..."
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
+            maxLength={10000}
             style={{ marginBottom: 12 }}
           />
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { listScripts } from "../api/client.js";
 import { nameOf, scriptKey } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES } from "../data/constants.js";
+import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 import {
   ArrowLeft, Play, Pencil, Trash2, MoreHorizontal,
   CheckCircle2, AlertCircle, Clock, Sparkles,
@@ -13,14 +14,6 @@ import {
    Product Detail — structured overview with tabs
    No raw markdown. Content flows naturally (no card scroll).
    ============================================================ */
-
-function useOutsideClick(ref, handler) {
-  useEffect(() => {
-    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [ref, handler]);
-}
 
 function aiContextInfo(p) {
   const fields = [
@@ -162,6 +155,8 @@ export default function ProductDetail({ product, onBack, onOpenStudio, onEdit, o
   const [confirmDel, setConfirmDel] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const menuBtnRef = useRef(null);
+  const menuPos = useDropdownPos(menuBtnRef, menuOpen);
   useOutsideClick(menuRef, () => setMenuOpen(false));
 
   useEffect(() => {
@@ -198,11 +193,11 @@ export default function ProductDetail({ product, onBack, onOpenStudio, onEdit, o
           <button className="ds-btn-ter" onClick={onEdit}><Pencil size={14} /> Edit</button>
           <button className="ds-btn-pri" onClick={onOpenStudio}><Play size={15} /> Open Call Studio</button>
           <div className="dt-actions" ref={menuRef}>
-            <button className="dt-more-btn" onClick={() => setMenuOpen((s) => !s)} title="Actions">
+            <button ref={menuBtnRef} className="dt-more-btn" onClick={() => setMenuOpen((s) => !s)} title="Actions">
               <MoreHorizontal size={16} />
             </button>
-            {menuOpen && (
-              <div className="dt-dropdown" style={{ right: 0, top: "100%", marginTop: 4 }}>
+            {menuOpen && menuPos && (
+              <div className="dt-dropdown" style={menuPos}>
                 {onDuplicate && (
                   <button className="dt-dropdown-item" onClick={() => { onDuplicate(product); setMenuOpen(false); }}>
                     <Copy size={14} /> Duplicate

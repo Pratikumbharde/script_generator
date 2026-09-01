@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listScripts, listVoiceRecordings, createVoiceRecording, deleteVoiceRecording } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 export default function VoiceRecordingView({ scripts: scriptsProp = [] }) {
   const [scripts, setScripts] = useState(scriptsProp)
@@ -88,7 +90,7 @@ export default function VoiceRecordingView({ scripts: scriptsProp = [] }) {
             <option value="female">Female</option>
           </select>
         </div>
-        <textarea className="ps-textarea" rows={4} placeholder="Paste script text to convert to speech..." value={form.text_content} onChange={(e) => setForm({ ...form, text_content: e.target.value })} />
+        <LimitedTextarea className="ps-textarea" rows={4} maxLength={10000} placeholder="Paste script text to convert to speech..." value={form.text_content} onChange={(e) => setForm({ ...form, text_content: e.target.value })} />
         <div className="ps-form-actions" style={{ marginTop: 12 }}>
           <button className="ps-btn" onClick={handleCreate} disabled={creating || !form.text_content.trim()}>
             {creating ? 'Creating...' : '🎙 Generate Recording'}

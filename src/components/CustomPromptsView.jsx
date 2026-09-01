@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listCustomPrompts, createCustomPrompt, updateCustomPrompt, deleteCustomPrompt } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const TYPE_OPTIONS = [
   { value: 'system', label: 'System Prompt' },
@@ -67,12 +69,12 @@ export default function CustomPromptsView() {
       <div className="ps-card" style={{ marginBottom: 24 }}>
         <h3 className="ps-section-title">{editing ? 'Edit Prompt' : 'New Custom Prompt'}</h3>
         <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <input className="ps-input" placeholder="Prompt name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <LimitedInput className="ps-input" placeholder="Prompt name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={200} />
           <select className="ps-select" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
             {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-        <textarea className="ps-textarea" rows={6} placeholder="Enter your custom prompt here..." value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
+        <LimitedTextarea className="ps-textarea" rows={6} placeholder="Enter your custom prompt here..." value={form.prompt} onChange={(e) => setForm({ ...form, prompt: e.target.value })} maxLength={5000} />
         <div className="ps-form-actions" style={{ marginTop: 12 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} />

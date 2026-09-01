@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import LimitedInput from "./shared/LimitedInput.jsx";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
+import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 import {
   listCoachingInsights,
   generateCoachingInsight,
@@ -87,14 +90,6 @@ function avg(arr) {
   return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
 }
 
-function useOutsideClick(ref, handler) {
-  useEffect(() => {
-    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [ref, handler]);
-}
-
 export default function CoachingInsightsView() {
   const [mode, setMode] = useState("overview");
   const [sessions, setSessions] = useState([]);
@@ -121,6 +116,8 @@ export default function CoachingInsightsView() {
   const pageSize = 10;
   const [activeDropdown, setActiveDropdown] = useState(null);
   const dropdownRef = useRef(null);
+  const dropdownBtnRef = useRef(null);
+  const dropdownPos = useDropdownPos(dropdownBtnRef, !!activeDropdown);
 
   const closeDropdown = useCallback(() => setActiveDropdown(null), []);
   useOutsideClick(dropdownRef, closeDropdown);
@@ -555,11 +552,11 @@ export default function CoachingInsightsView() {
                                 <td style={{ whiteSpace: "nowrap", fontSize: 12.5, color: "var(--muted)" }}>{new Date(s.created_at).toLocaleDateString()}</td>
                                 <td onClick={(e) => e.stopPropagation()}>
                                   <div className="dt-actions" ref={activeDropdown === s.id ? dropdownRef : null}>
-                                    <button className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === s.id ? null : s.id); }}>
+                                    <button ref={activeDropdown === s.id ? dropdownBtnRef : null} className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === s.id ? null : s.id); }}>
                                       <MoreHorizontal size={16} />
                                     </button>
-                                    {activeDropdown === s.id && (
-                                      <div className="dt-dropdown" style={{ right: 0, top: "100%", marginTop: 4 }}>
+                                    {activeDropdown === s.id && dropdownPos && (
+                                      <div className="dt-dropdown" style={dropdownPos}>
                                         <button className="dt-dropdown-item" onClick={() => { setSelectedSession(s); setMode("detail"); setActiveDropdown(null); }}><Eye size={14} /> Open</button>
                                         <button className="dt-dropdown-item danger" onClick={() => { if (confirm("Delete this coaching session?")) handleDelete(s.id); setActiveDropdown(null); }}><Trash2 size={14} /> Delete</button>
                                       </div>
@@ -654,7 +651,7 @@ export default function CoachingInsightsView() {
                 </div>
                 <div style={{ marginBottom: 18 }}>
                   <label className="flab">Transcript</label>
-                  <textarea
+                  <LimitedTextarea
                     className="finp"
                     style={{ minHeight: 280, resize: "vertical", width: "100%", fontSize: 14, lineHeight: 1.6 }}
                     placeholder="Paste your call or roleplay transcript here…
@@ -664,6 +661,7 @@ Prospect: I'm good, just busy with quarter-end.
 Salesperson: I understand — that's exactly why I called…"
                     value={transcriptInput}
                     onChange={(e) => setTranscriptInput(e.target.value)}
+                    maxLength={10000}
                   />
                   <div className="fhint" style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                     <span>{transcriptInput.length.toLocaleString()} characters</span>

@@ -3,6 +3,9 @@ import {
   METHODS, CALL_TYPES, DURATIONS, LANGUAGES, TONE_COLOR, methodsFor, durationsFor, durationHintFor
 } from "../data/constants.js";
 import { S, slug, scriptKey, generateScript, nameOf, normalizeSegments, updateScriptMeta } from "../utils/helpers.js";
+import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
+import LimitedInput from "./shared/LimitedInput.jsx";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import CallCockpit from "./CallCockpit.jsx";
 import { createShareLink, updateScript } from "../api/client.js";
@@ -20,14 +23,6 @@ import {
    Say This is dominant. Coaching is secondary.
    Call state is explicit. Actions are tiered.
    ============================================================ */
-
-function useOutsideClick(ref, handler) {
-  useEffect(() => {
-    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [ref, handler]);
-}
 
 export default function Cockpit({ product, method, callType, duration, meta, script, opts, onBack, onChangeSetup, onRegenerate, regenerating, readOnly }) {
   const { user } = useAuth();
@@ -55,6 +50,8 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
   // Overflow menu
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const menuBtnRef = useRef(null);
+  const menuPos = useDropdownPos(menuBtnRef, menuOpen);
   useOutsideClick(menuRef, () => setMenuOpen(false));
 
   // Inline editing
@@ -293,7 +290,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             Running the <b style={{ color: "var(--ink)" }}>{method.name}</b> playbook.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
+        <div className="ps-top-actions">
           {!readOnly && !editing && <button className="ps-btn ghost sm" onClick={startEditing}><Pencil size={14} /> Edit</button>}
           {editing && (
             <>
@@ -310,11 +307,11 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           </button>
           {!readOnly && (
           <div className="dt-actions" ref={menuRef}>
-            <button className="dt-more-btn" onClick={() => setMenuOpen((s) => !s)} title="More actions">
+            <button ref={menuBtnRef} className="dt-more-btn" onClick={() => setMenuOpen((s) => !s)} title="More actions">
               <MoreHorizontal size={16} />
             </button>
-            {menuOpen && (
-              <div className="dt-dropdown" style={{ right: 0, top: "100%", marginTop: 4 }}>
+            {menuOpen && menuPos && (
+              <div className="dt-dropdown" style={menuPos}>
                 <button className="dt-dropdown-item" onClick={() => { copyToClipboard(); setMenuOpen(false); }}>
                   <Copy size={14} /> {copied ? "Copied" : "Copy script"}
                 </button>
@@ -377,11 +374,12 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                     </div>
                     <div className="opening">
                       {editing ? (
-                        <textarea
+                        <LimitedTextarea
                           className="finp"
                           value={editScript.opening || ""}
                           onChange={(e) => setEditScript({ ...editScript, opening: e.target.value })}
                           style={{ width: "100%", minHeight: 48, fontSize: 17, lineHeight: 1.4, fontFamily: "'Space Grotesk'" }}
+                          maxLength={2000}
                         />
                       ) : (
                         <>"{s.opening}"</>
@@ -405,11 +403,12 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                           )}
                         </span>
                         {editing ? (
-                          <input
+                          <LimitedInput
                             className="finp"
                             value={editScript.toneGuidance || ""}
                             onChange={(e) => setEditScript({ ...editScript, toneGuidance: e.target.value })}
                             style={{ flex: 1, fontSize: 13, minWidth: 0 }}
+                            maxLength={500}
                           />
                         ) : (
                           <span className="tone-guide">{s.toneGuidance}</span>
@@ -502,16 +501,16 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                                 {/* Segment label */}
                                 <div style={{ marginBottom: 8 }}>
                                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Segment label</label>
-                                  <input className="finp" value={editScript.segments[i]?.label || ""} onChange={(e) => {
+                                  <LimitedInput className="finp" value={editScript.segments[i]?.label || ""} onChange={(e) => {
                                     const segs = [...editScript.segments]; segs[i] = { ...segs[i], label: e.target.value }; setEditScript({ ...editScript, segments: segs });
-                                  }} style={{ width: "100%", fontSize: 14 }} />
+                                  }} style={{ width: "100%", fontSize: 14 }} maxLength={200} />
                                 </div>
                                 {/* Goal */}
                                 <div style={{ marginBottom: 8 }}>
                                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Goal</label>
-                                  <input className="finp" value={editScript.segments[i]?.goal || ""} onChange={(e) => {
+                                  <LimitedInput className="finp" value={editScript.segments[i]?.goal || ""} onChange={(e) => {
                                     const segs = [...editScript.segments]; segs[i] = { ...segs[i], goal: e.target.value }; setEditScript({ ...editScript, segments: segs });
-                                  }} style={{ width: "100%", fontSize: 14 }} />
+                                  }} style={{ width: "100%", fontSize: 14 }} maxLength={500} />
                                 </div>
                                 {/* SAY THIS */}
                                 <div className="say-block" style={{ marginBottom: 12 }}>
@@ -523,9 +522,9 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                                   </div>
                                   {(editScript.segments[i]?.say || []).map((t, j) => (
                                     <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
-                                      <input className="finp" value={t} onChange={(e) => {
+                                      <LimitedInput className="finp" value={t} onChange={(e) => {
                                         const segs = [...editScript.segments]; const say = [...segs[i].say]; say[j] = e.target.value; segs[i] = { ...segs[i], say }; setEditScript({ ...editScript, segments: segs });
-                                      }} style={{ flex: 1, fontSize: 14 }} />
+                                      }} style={{ flex: 1, fontSize: 14 }} maxLength={2000} />
                                       <button className="edit-del-btn" onClick={() => {
                                         const segs = [...editScript.segments]; const say = segs[i].say.filter((_, k) => k !== j); segs[i] = { ...segs[i], say }; setEditScript({ ...editScript, segments: segs });
                                       }}><Trash2 size={14} /></button>
@@ -542,9 +541,9 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                                   </div>
                                   {(editScript.segments[i]?.ask || []).map((t, j) => (
                                     <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
-                                      <input className="finp" value={t} onChange={(e) => {
+                                      <LimitedInput className="finp" value={t} onChange={(e) => {
                                         const segs = [...editScript.segments]; const ask = [...segs[i].ask]; ask[j] = e.target.value; segs[i] = { ...segs[i], ask }; setEditScript({ ...editScript, segments: segs });
-                                      }} style={{ flex: 1, fontSize: 14 }} />
+                                      }} style={{ flex: 1, fontSize: 14 }} maxLength={2000} />
                                       <button className="edit-del-btn" onClick={() => {
                                         const segs = [...editScript.segments]; const ask = segs[i].ask.filter((_, k) => k !== j); segs[i] = { ...segs[i], ask }; setEditScript({ ...editScript, segments: segs });
                                       }}><Trash2 size={14} /></button>
@@ -561,9 +560,9 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                                   </div>
                                   {(editScript.segments[i]?.do || []).map((t, j) => (
                                     <div key={j} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
-                                      <input className="finp" value={t} onChange={(e) => {
+                                      <LimitedInput className="finp" value={t} onChange={(e) => {
                                         const segs = [...editScript.segments]; const doArr = [...segs[i].do]; doArr[j] = e.target.value; segs[i] = { ...segs[i], do: doArr }; setEditScript({ ...editScript, segments: segs });
-                                      }} style={{ flex: 1, fontSize: 13, fontStyle: "italic" }} />
+                                      }} style={{ flex: 1, fontSize: 13, fontStyle: "italic" }} maxLength={2000} />
                                       <button className="edit-del-btn" onClick={() => {
                                         const segs = [...editScript.segments]; const doArr = segs[i].do.filter((_, k) => k !== j); segs[i] = { ...segs[i], do: doArr }; setEditScript({ ...editScript, segments: segs });
                                       }}><Trash2 size={14} /></button>
@@ -641,50 +640,50 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           </div>
 
           <ObjectionPanel objections={primaryScript.objections || []} editing={editing} editScript={editScript} setEditScript={setEditScript} />
-        </div>
-      </div>
 
-      {/* Outcome tracking */}
-      <div className="ps-card" style={{ marginTop: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>How did this call go?</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "#6B7B93" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
-                <button
-                  key={o.id}
-                  className={`ps-btn ${outcome === o.id ? "pri" : "ghost"}`}
-                  style={outcome === o.id ? { background: o.color, borderColor: o.color, color: "#fff" } : {}}
-                  onClick={() => saveOutcome(o.id)}
-                  disabled={savingMeta}
-                >
-                  {o.label}
-                </button>
-              ))}
+          {/* Outcome tracking */}
+          <div className="ps-card" style={{ marginTop: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>How did this call go?</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "#6B7B93" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
+                    <button
+                      key={o.id}
+                      className={`ps-btn ${outcome === o.id ? "pri" : "ghost"}`}
+                      style={outcome === o.id ? { background: o.color, borderColor: o.color, color: "#fff" } : {}}
+                      onClick={() => saveOutcome(o.id)}
+                      disabled={savingMeta}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button className="ps-btn ghost" onClick={markUsed} disabled={savingMeta}>
+                {usedAt ? `Used ${new Date(usedAt).toLocaleDateString()}` : "Mark as used"}
+              </button>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 13, color: "var(--muted)", display: "block", marginBottom: 6 }}>Post-call notes</label>
+              <LimitedTextarea
+                className="finp"
+                style={{ minHeight: 60, resize: "vertical", width: "100%" }}
+                placeholder="What worked? What didn't? Any buyer objections you didn't expect?"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => saveNotes(notes)}
+                maxLength={5000}
+              />
             </div>
           </div>
-          <button className="ps-btn ghost" onClick={markUsed} disabled={savingMeta}>
-            {usedAt ? `Used ${new Date(usedAt).toLocaleDateString()}` : "Mark as used"}
-          </button>
-        </div>
-        <div style={{ marginTop: 12 }}>
-          <label style={{ fontSize: 13, color: "var(--muted)", display: "block", marginBottom: 6 }}>Post-call notes</label>
-          <textarea
-            className="finp"
-            style={{ minHeight: 60, resize: "vertical", width: "100%" }}
-            placeholder="What worked? What didn't? Any buyer objections you didn't expect?"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => saveNotes(notes)}
-          />
-        </div>
-      </div>
 
-      {/* Script Comments */}
-      <div className="ps-card" style={{ marginTop: 20 }}>
-        <ScriptComments scriptId={script.id || 0} userEmail={user?.email || ""} />
+          {/* Script Comments */}
+          <div className="ps-card" style={{ marginTop: 20 }}>
+            <ScriptComments scriptId={script.id || 0} userEmail={user?.email || ""} />
+          </div>
+        </div>
       </div>
-    </div>
 
       {/* Regenerate modal */}
       {confirmRegen && (
@@ -812,15 +811,15 @@ function ObjectionPanel({ objections, editing, editScript, setEditScript }) {
               <div style={{ padding: "12px 16px" }}>
                 <div style={{ marginBottom: 8 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Objection</label>
-                  <input className="finp" value={o.objection || ""} onChange={(e) => {
+                  <LimitedInput className="finp" value={o.objection || ""} onChange={(e) => {
                     const objs = [...editScript.objections]; objs[i] = { ...objs[i], objection: e.target.value }; setEditScript({ ...editScript, objections: objs });
-                  }} style={{ width: "100%", fontSize: 13 }} />
+                  }} style={{ width: "100%", fontSize: 13 }} maxLength={500} />
                 </div>
                 <div style={{ marginBottom: 8 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4, display: "block" }}>Response</label>
-                  <textarea className="finp" value={o.response || ""} onChange={(e) => {
+                  <LimitedTextarea className="finp" value={o.response || ""} onChange={(e) => {
                     const objs = [...editScript.objections]; objs[i] = { ...objs[i], response: e.target.value }; setEditScript({ ...editScript, objections: objs });
-                  }} style={{ width: "100%", fontSize: 13, minHeight: 48, resize: "vertical" }} />
+                  }} style={{ width: "100%", fontSize: 13, minHeight: 48, resize: "vertical" }} maxLength={2000} />
                 </div>
                 <button className="edit-del-btn" onClick={() => {
                   setEditScript({ ...editScript, objections: editScript.objections.filter((_, k) => k !== i) });

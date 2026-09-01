@@ -12,6 +12,8 @@ import { useAuth } from "../context/AuthContext.jsx";
 import {
   Users, Shield, UserPlus, Mail, ChevronDown, X, FileText, MoreHorizontal, Check
 } from "lucide-react";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 /* ============================================================
    TeamView — RBAC team management page
@@ -144,11 +146,11 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
             <div className="frow two" style={{ marginBottom: 12 }}>
               <div>
                 <label className="flab">Email address</label>
-                <input className="finp" placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
               </div>
               <div>
                 <label className="flab">Name (optional)</label>
-                <input className="finp" placeholder="Full name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+                <LimitedInput className="finp" maxLength={200} placeholder="Full name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
@@ -326,7 +328,7 @@ function WorkspaceSettings({ workspace }) {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 18 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <label className="flab">Workspace name</label>
-          <input className="finp" value={wsName} onChange={(e) => setWsName(e.target.value)} placeholder="e.g. Acme Sales" />
+          <LimitedInput className="finp" maxLength={200} value={wsName} onChange={(e) => setWsName(e.target.value)} placeholder="e.g. Acme Sales" />
         </div>
         <button className="ps-btn pri" disabled={!wsName.trim() || wsName === workspace?.name} onClick={saveName}>Save</button>
       </div>
@@ -337,7 +339,7 @@ function WorkspaceSettings({ workspace }) {
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Invite teammates</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <input className="finp" placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
               </div>
               <select className="fsel" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ maxWidth: 140 }}>
                 <option value="member">Member</option>
@@ -383,7 +385,7 @@ function WorkspaceSettings({ workspace }) {
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Join a workspace</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <input className="finp" placeholder="Paste invite token here" value={joinToken} onChange={(e) => setJoinToken(e.target.value)} />
+            <LimitedInput className="finp" maxLength={500} placeholder="Paste invite token here" value={joinToken} onChange={(e) => setJoinToken(e.target.value)} />
           </div>
           <button className="ps-btn ghost" disabled={!joinToken.trim()} onClick={acceptJoin}>Join</button>
         </div>
@@ -502,7 +504,7 @@ function IntegrationsSettings() {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <input className="finp" placeholder="Key name (e.g. Zapier)" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
+            <LimitedInput className="finp" maxLength={200} placeholder="Key name (e.g. Zapier)" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
           </div>
           <button className="ps-btn pri" disabled={loading} onClick={generateKey}>Generate key</button>
         </div>
@@ -528,10 +530,10 @@ function IntegrationsSettings() {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <input className="finp" placeholder="https://your-app.com/webhooks/pitch-studio" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
+            <LimitedInput className="finp" maxLength={500} placeholder="https://your-app.com/webhooks/pitch-studio" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
           </div>
-          <input className="finp" style={{ maxWidth: 180 }} placeholder="Events (comma-separated)" value={whEvents} onChange={(e) => setWhEvents(e.target.value)} />
-          <input className="finp" style={{ maxWidth: 140 }} placeholder="Secret (optional)" value={whSecret} onChange={(e) => setWhSecret(e.target.value)} />
+          <LimitedInput className="finp" maxLength={500} style={{ maxWidth: 180 }} placeholder="Events (comma-separated)" value={whEvents} onChange={(e) => setWhEvents(e.target.value)} />
+          <LimitedInput className="finp" maxLength={200} style={{ maxWidth: 140 }} placeholder="Secret (optional)" value={whSecret} onChange={(e) => setWhSecret(e.target.value)} />
           <button className="ps-btn pri" disabled={loading || !whUrl.trim()} onClick={addWebhook}>Add webhook</button>
         </div>
       </div>
@@ -560,9 +562,9 @@ function IntegrationsSettings() {
             <option value="custom">Custom webhook</option>
           </select>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <input className="finp" placeholder="https://hooks.zapier.com/... or CRM webhook URL" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} />
+            <LimitedInput className="finp" maxLength={500} placeholder="https://hooks.zapier.com/... or CRM webhook URL" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} />
           </div>
-          <input className="finp" style={{ maxWidth: 160 }} placeholder="API token (optional)" value={crmToken} onChange={(e) => setCrmToken(e.target.value)} />
+          <LimitedInput className="finp" maxLength={500} style={{ maxWidth: 160 }} placeholder="API token (optional)" value={crmToken} onChange={(e) => setCrmToken(e.target.value)} />
           <button className="ps-btn pri" disabled={loading || !crmUrl.trim()} onClick={addCrm}>Connect</button>
         </div>
       </div>

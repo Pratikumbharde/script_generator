@@ -3,6 +3,7 @@ import { METHODS, CALL_TYPES, CALL_METHODS, DURATIONS, LANGUAGES, REGIONS, DELIV
 import { S, slug, scriptKey, generateScript, generateScriptStream } from "../utils/helpers.js";
 import { getVoiceContext, getAssignedScripts } from "../api/client.js";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
+import LimitedInput from "./shared/LimitedInput.jsx";
 import Cockpit from "./ScriptCockpit.jsx";
 
 export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true }) {
@@ -329,7 +330,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
                   <option value="__custom__">Custom persona…</option>
                 </select>
                 {persona === "__custom__" && (
-                  <input className="finp" style={{ marginTop: 8 }} placeholder="Describe the buyer, e.g. 'price-sensitive kirana shop owner'" value={customPersona} onChange={(e) => setCustomPersona(e.target.value)} />
+                  <LimitedInput className="finp" style={{ marginTop: 8 }} placeholder="Describe the buyer, e.g. 'price-sensitive kirana shop owner'" value={customPersona} onChange={(e) => setCustomPersona(e.target.value)} maxLength={500} />
                 )}
                 {personaList.length === 0 && persona !== "__custom__" && <div className="fhint">Tip: add personas on the product so they show up here automatically.</div>}
               </div>

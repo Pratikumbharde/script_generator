@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import LimitedInput from "./shared/LimitedInput.jsx";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import { createProduct, updateProduct } from "../api/client.js";
 import {
   ChevronDown,
@@ -26,20 +28,20 @@ const SECTIONS = [
 ];
 
 const FIELD_META = {
-  name: { label: "Product name", required: true, example: "e.g. Northwind CRM" },
-  category: { label: "Category", recommended: true, example: "e.g. B2B SaaS, Healthcare Tech" },
-  oneLiner: { label: "One-liner", required: true, example: "AI-powered CRM that helps sales teams close 30% more deals" },
-  description: { label: "What it does", required: true, example: "Describe the product, core value, and how it works in 2–3 sentences" },
-  idealCustomer: { label: "Ideal customer", recommended: true, example: "Sales Director at a 50–500 employee B2B SaaS company" },
-  painPoints: { label: "Pains it solves", recommended: true, example: "Lost leads, slow follow-ups, no call tracking, scattered data" },
-  personas: { label: "Buyer personas / ICPs", recommended: true, example: "Price-sensitive kirana shop owner\nBusy clinic owner, 40s\nEnterprise IT head" },
-  differentiators: { label: "Differentiators", recommended: true, example: "Faster implementation (1 day vs 2 weeks), no-code setup, 40% lower cost" },
-  competitors: { label: "Main competitors", advanced: true, example: "Salesforce, HubSpot, Pipedrive — who you get compared to" },
-  proofPoints: { label: "Proof points", advanced: true, example: "Stats, case studies, notable customers, G2 ratings" },
-  priceModel: { label: "Pricing model", advanced: true, example: "$49/seat/month, usage-based, freemium" },
-  features: { label: "Key features", advanced: true, example: "Auto-dial, pipeline view, WhatsApp integration, hourly reports" },
-  commonObjections: { label: "Common objections", advanced: true, example: "Too expensive, we already have a CRM, too complex for our team" },
-  keyMessages: { label: "Key messaging", advanced: true, example: "The only mobile-first CRM built for Indian telecalling teams" },
+  name: { label: "Product name", required: true, example: "e.g. Northwind CRM", maxLength: 200 },
+  category: { label: "Category", recommended: true, example: "e.g. B2B SaaS, Healthcare Tech", maxLength: 200 },
+  oneLiner: { label: "One-liner", required: true, example: "AI-powered CRM that helps sales teams close 30% more deals", maxLength: 300 },
+  description: { label: "What it does", required: true, example: "Describe the product, core value, and how it works in 2–3 sentences", maxLength: 2000 },
+  idealCustomer: { label: "Ideal customer", recommended: true, example: "Sales Director at a 50–500 employee B2B SaaS company", maxLength: 500 },
+  painPoints: { label: "Pains it solves", recommended: true, example: "Lost leads, slow follow-ups, no call tracking, scattered data", maxLength: 2000 },
+  personas: { label: "Buyer personas / ICPs", recommended: true, example: "Price-sensitive kirana shop owner\nBusy clinic owner, 40s\nEnterprise IT head", maxLength: 2000 },
+  differentiators: { label: "Differentiators", recommended: true, example: "Faster implementation (1 day vs 2 weeks), no-code setup, 40% lower cost", maxLength: 2000 },
+  competitors: { label: "Main competitors", advanced: true, example: "Salesforce, HubSpot, Pipedrive — who you get compared to", maxLength: 500 },
+  proofPoints: { label: "Proof points", advanced: true, example: "Stats, case studies, notable customers, G2 ratings", maxLength: 2000 },
+  priceModel: { label: "Pricing model", advanced: true, example: "$49/seat/month, usage-based, freemium", maxLength: 300 },
+  features: { label: "Key features", advanced: true, example: "Auto-dial, pipeline view, WhatsApp integration, hourly reports", maxLength: 2000 },
+  commonObjections: { label: "Common objections", advanced: true, example: "Too expensive, we already have a CRM, too complex for our team", maxLength: 2000 },
+  keyMessages: { label: "Key messaging", advanced: true, example: "The only mobile-first CRM built for Indian telecalling teams", maxLength: 2000 },
 };
 
 function getSectionCompletion(secId, values) {
@@ -250,15 +252,16 @@ export default function ProductForm({ product, onCancel, onSaved }) {
           {meta.advanced && <span className="adv">Advanced</span>}
         </label>
         {isTextarea ? (
-          <textarea
+          <LimitedTextarea
             className="ftext ds-textarea"
             value={f[key]}
             onChange={set(key)}
             placeholder={meta.example}
             rows={key === "description" ? 4 : 3}
+            maxLength={meta.maxLength}
           />
         ) : (
-          <input className="finp ds-input" value={f[key]} onChange={set(key)} placeholder={meta.example} />
+          <LimitedInput className="finp ds-input" value={f[key]} onChange={set(key)} placeholder={meta.example} maxLength={meta.maxLength} />
         )}
         {errors[key] && <div className="pf-err">{errors[key]}</div>}
         {!errors[key] && meta.example && <div className="pf-field-example">{meta.example}</div>}

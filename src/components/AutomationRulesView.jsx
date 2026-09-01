@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { listAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule } from "../api/client.js";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const TRIGGERS = [
   { id: "script.completed", label: "Script generated" },
@@ -143,11 +145,11 @@ export default function AutomationRulesView() {
               </div>
               <div className="frow">
                 <label className="flab">Target URL / Email / Channel</label>
-                <input className="finp" value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} placeholder="https://hooks.zapier.com/… or email@company.com" />
+                <LimitedInput className="finp" maxLength={500} value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} placeholder="https://hooks.zapier.com/… or email@company.com" />
               </div>
               <div className="frow">
                 <label className="flab">Payload template <span className="opt">(optional JSON)</span></label>
-                <textarea className="ftext" value={form.payload_template} onChange={(e) => setForm({ ...form, payload_template: e.target.value })} placeholder={'{"event": "{{trigger}}", "product": "{{productName}}"}'} style={{ minHeight: 80 }} />
+                <LimitedTextarea className="ftext" maxLength={5000} value={form.payload_template} onChange={(e) => setForm({ ...form, payload_template: e.target.value })} placeholder={'{"event": "{{trigger}}", "product": "{{productName}}"}'} style={{ minHeight: 80 }} />
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
                 <button className="ps-btn ghost" onClick={() => setShowForm(false)}>Cancel</button>

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listCrmOAuthConnections, saveCrmOAuthConnection, deleteCrmOAuthConnection } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 export default function CrmOAuthView() {
   const [salesforce, setSalesforce] = useState([])
@@ -72,10 +74,10 @@ export default function CrmOAuthView() {
             <option value="salesforce">Salesforce</option>
             <option value="hubspot">HubSpot</option>
           </select>
-          <input className="ps-input" placeholder="Access token" value={form.access_token} onChange={(e) => setForm({ ...form, access_token: e.target.value })} />
-          <input className="ps-input" placeholder="Instance URL (optional)" value={form.instance_url} onChange={(e) => setForm({ ...form, instance_url: e.target.value })} />
+          <LimitedInput className="ps-input" maxLength={500} placeholder="Access token" value={form.access_token} onChange={(e) => setForm({ ...form, access_token: e.target.value })} />
+          <LimitedInput className="ps-input" maxLength={500} placeholder="Instance URL (optional)" value={form.instance_url} onChange={(e) => setForm({ ...form, instance_url: e.target.value })} />
         </div>
-        <input className="ps-input" placeholder="Refresh token (optional)" value={form.refresh_token} onChange={(e) => setForm({ ...form, refresh_token: e.target.value })} style={{ marginBottom: 12 }} />
+        <LimitedInput className="ps-input" maxLength={500} placeholder="Refresh token (optional)" value={form.refresh_token} onChange={(e) => setForm({ ...form, refresh_token: e.target.value })} style={{ marginBottom: 12 }} />
         <button className="ps-btn" onClick={handleSave} disabled={!form.access_token.trim()}>💾 Save Connection</button>
       </div>
 

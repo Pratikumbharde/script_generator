@@ -32,6 +32,9 @@ import {
   Eye,
   Search, LayoutGrid, List, SlidersHorizontal, ChevronLeft, MoreHorizontal,
 } from "lucide-react";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
+import { useOutsideClick, useDropdownPos } from './shared/DropdownHooks.js'
 
 /* ============================================================
    Competitor Monitoring — Command Center
@@ -73,14 +76,6 @@ function timeAgo(iso) {
   return d.toLocaleDateString();
 }
 
-function useOutsideClick(ref, handler) {
-  useEffect(() => {
-    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [ref, handler]);
-}
-
 export default function CompetitorIntelView() {
   const [mode, setMode] = useState("overview");
   const [selectedCompetitor, setSelectedCompetitor] = useState(null);
@@ -99,6 +94,8 @@ export default function CompetitorIntelView() {
   const pageSize = 10;
   const [activeDropdown, setActiveDropdown] = useState(null);
   const dropdownRef = useRef(null);
+  const dropdownBtnRef = useRef(null);
+  const dropdownPos = useDropdownPos(dropdownBtnRef, !!activeDropdown);
 
   const closeDropdown = useCallback(() => setActiveDropdown(null), []);
   useOutsideClick(dropdownRef, closeDropdown);
@@ -523,11 +520,11 @@ export default function CompetitorIntelView() {
                                 <td style={{ whiteSpace: "nowrap", fontSize: 12.5, color: "var(--muted)" }}>{c.last_intel_at ? timeAgo(c.last_intel_at) : "—"}</td>
                                 <td onClick={(e) => e.stopPropagation()}>
                                   <div className="dt-actions" ref={activeDropdown === c.id ? dropdownRef : null}>
-                                    <button className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === c.id ? null : c.id); }}>
+                                    <button ref={activeDropdown === c.id ? dropdownBtnRef : null} className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === c.id ? null : c.id); }}>
                                       <MoreHorizontal size={16} />
                                     </button>
-                                    {activeDropdown === c.id && (
-                                      <div className="dt-dropdown" style={{ right: 0, top: "100%", marginTop: 4 }}>
+                                    {activeDropdown === c.id && dropdownPos && (
+                                      <div className="dt-dropdown" style={dropdownPos}>
                                         <button className="dt-dropdown-item" onClick={() => { setSelectedCompetitor(c); loadIntel(c.id); setMode("detail"); setDetailTab("overview"); setActiveDropdown(null); }}><Eye size={14} /> Open</button>
                                         <button className="dt-dropdown-item danger" onClick={() => { if (confirm("Delete this competitor and all associated intel?")) handleDeleteCompetitor(c.id); setActiveDropdown(null); }}><Trash2 size={14} /> Delete</button>
                                       </div>
@@ -1143,8 +1140,9 @@ export default function CompetitorIntelView() {
             {addError && <div className="err" style={{ marginBottom: 14 }}>{addError}</div>}
             <div className="frow" style={{ marginBottom: 14 }}>
               <label className="flab">Competitor name *</label>
-              <input
+              <LimitedInput
                 className="finp"
+                maxLength={200}
                 placeholder="e.g. Zoho CRM"
                 value={addForm.name}
                 onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
@@ -1152,8 +1150,9 @@ export default function CompetitorIntelView() {
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
               <label className="flab">Category</label>
-              <input
+              <LimitedInput
                 className="finp"
+                maxLength={200}
                 placeholder="e.g. CRM Software"
                 value={addForm.category}
                 onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
@@ -1161,8 +1160,9 @@ export default function CompetitorIntelView() {
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
               <label className="flab">Website</label>
-              <input
+              <LimitedInput
                 className="finp"
+                maxLength={500}
                 placeholder="https://..."
                 value={addForm.website}
                 onChange={(e) => setAddForm({ ...addForm, website: e.target.value })}
@@ -1218,8 +1218,9 @@ export default function CompetitorIntelView() {
             {analyzeError && <div className="err" style={{ marginBottom: 14 }}>{analyzeError}</div>}
             <div className="frow" style={{ marginBottom: 12 }}>
               <label className="flab">Source URL (optional)</label>
-              <input
+              <LimitedInput
                 className="finp"
+                maxLength={500}
                 placeholder="https://competitor.com/pricing"
                 value={analyzeUrl}
                 onChange={(e) => setAnalyzeUrl(e.target.value)}
@@ -1227,8 +1228,9 @@ export default function CompetitorIntelView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="flab">Content to analyze</label>
-              <textarea
+              <LimitedTextarea
                 className="finp"
+                maxLength={5000}
                 style={{ minHeight: 200, resize: "vertical", width: "100%" }}
                 placeholder="Paste competitor content here — pricing page, product announcement, sales messaging, or any intel you want analyzed…"
                 value={analyzeContent}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { S, nameOf, parseScriptKey, scriptKey, generateScript } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES, REGIONS, DELIVERY } from "../data/constants.js";
 import { Search, List, LayoutGrid, SlidersHorizontal, Columns, MoreHorizontal, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, FileText, Copy, Trash2, Sparkles, Globe, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
+import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 
 /* ============================================================
    ScriptsView — Enterprise DataTable with List/Card toggle,
@@ -84,14 +85,6 @@ function SortIcon({ dir }) {
   return dir === "asc" ? <ArrowUp size={12} className="sort" /> : <ArrowDown size={12} className="sort" />;
 }
 
-function useOutsideClick(ref, handler) {
-  useEffect(() => {
-    const fn = (e) => { if (ref.current && !ref.current.contains(e.target)) handler(); };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, [ref, handler]);
-}
-
 export default function ScriptsView({ products, teamLanguages = [], onOpen, onVariant, onGoStudio }) {
   const [rows, setRows] = useState(null);
   const [filters, setFilters] = useUrlState();
@@ -113,6 +106,8 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const [kpiFilter, setKpiFilter] = useState(null);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const dropdownRef = useRef(null);
+  const dropdownBtnRef = useRef(null);
+  const dropdownPos = useDropdownPos(dropdownBtnRef, !!activeDropdown);
   useOutsideClick(dropdownRef, () => setActiveDropdown(null));
 
   const pageSize = filters.view === "cards" ? 12 : 20;
@@ -385,11 +380,11 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         {visibleCols.has("updated") && <td style={{ color: "var(--muted)", fontSize: 12 }}>{updated}</td>}
         <td onClick={(e) => e.stopPropagation()}>
           <div className="dt-actions" ref={activeDropdown === r.key ? dropdownRef : null}>
-            <button className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === r.key ? null : r.key); }}>
+            <button ref={activeDropdown === r.key ? dropdownBtnRef : null} className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === r.key ? null : r.key); }}>
               <MoreHorizontal size={16} />
             </button>
-            {activeDropdown === r.key && (
-              <div className="dt-dropdown">
+            {activeDropdown === r.key && dropdownPos && (
+              <div className="dt-dropdown" style={dropdownPos}>
                 {prodExists ? (
                   <>
                     <button className="dt-dropdown-item" onClick={(e) => { e.stopPropagation(); onOpen(r); setActiveDropdown(null); }}>
@@ -428,6 +423,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   };
 
   const renderTable = () => (
+    <div className="dt-table-wrap">
     <table className="dt-table">
       {renderTableHeader()}
       <tbody>
@@ -448,6 +444,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         )}
       </tbody>
     </table>
+    </div>
   );
 
   const renderCards = () => (

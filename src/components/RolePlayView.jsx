@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import { callModel, nameOf } from "../utils/helpers.js";
 import {
   METHODS, CALL_TYPES, LANGUAGES, BUYER_PERSONAS,
@@ -432,12 +433,13 @@ Evaluate.`;
                 {buyerPersonaId && (
                   <div style={{ marginTop: 10 }}>
                     <label className="flab" style={{ fontSize: 12 }}>Buyer Profile</label>
-                    <textarea
+                    <LimitedTextarea
                       className="ftext"
                       style={{ minHeight: 80, fontSize: 13 }}
                       placeholder="Describe the buyer's situation, pain points, and attitude..."
                       value={buyerProfile}
                       onChange={(e) => setBuyerProfile(e.target.value)}
+                      maxLength={2000}
                     />
                     <div className="fhint">The AI will behave according to this profile.</div>
                   </div>

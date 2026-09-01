@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { routeChat, getModelRoutingLogs } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const TASK_TYPES = [
   { value: 'script_generation', label: 'Script Generation' },
@@ -71,7 +73,7 @@ export default function ModelRoutingView() {
             <option value="glm-5.2">glm-5.2</option>
           </select>
         </div>
-        <input className="ps-input" placeholder="Enter a test prompt..." value={prompt} onChange={(e) => setPrompt(e.target.value)} style={{ marginBottom: 12 }} />
+        <LimitedInput className="ps-input" maxLength={2000} placeholder="Enter a test prompt..." value={prompt} onChange={(e) => setPrompt(e.target.value)} style={{ marginBottom: 12 }} />
         <button className="ps-btn" onClick={handleRoute} disabled={routing || !prompt.trim()}>
           {routing ? 'Routing...' : '🔄 Route to Best Model'}
         </button>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { listScheduledCalls, createScheduledCall, updateScheduledCall, deleteScheduledCall } from "../api/client.js";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const STATUSES = [
   { id: "scheduled", label: "Scheduled", color: "var(--accent-ink)" },
@@ -250,15 +252,15 @@ export default function ScheduledCallsView({ products }) {
                 </div>
                 <div className="frow">
                   <label className="flab">Prospect name *</label>
-                  <input className="finp" value={form.prospect_name} onChange={(e) => setForm({ ...form, prospect_name: e.target.value })} placeholder="e.g. Rahul Sharma" />
+                  <LimitedInput className="finp" maxLength={200} value={form.prospect_name} onChange={(e) => setForm({ ...form, prospect_name: e.target.value })} placeholder="e.g. Rahul Sharma" />
                 </div>
                 <div className="frow">
                   <label className="flab">Company</label>
-                  <input className="finp" value={form.prospect_company} onChange={(e) => setForm({ ...form, prospect_company: e.target.value })} placeholder="e.g. Acme Corp" />
+                  <LimitedInput className="finp" maxLength={200} value={form.prospect_company} onChange={(e) => setForm({ ...form, prospect_company: e.target.value })} placeholder="e.g. Acme Corp" />
                 </div>
                 <div className="frow">
                   <label className="flab">Email</label>
-                  <input className="finp" value={form.prospect_email} onChange={(e) => setForm({ ...form, prospect_email: e.target.value })} placeholder="rahul@acme.com" />
+                  <LimitedInput className="finp" maxLength={300} value={form.prospect_email} onChange={(e) => setForm({ ...form, prospect_email: e.target.value })} placeholder="rahul@acme.com" />
                 </div>
                 <div className="frow">
                   <label className="flab">Date & time *</label>
@@ -270,11 +272,11 @@ export default function ScheduledCallsView({ products }) {
                 </div>
                 <div className="frow">
                   <label className="flab">Timezone</label>
-                  <input className="finp" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
+                  <LimitedInput className="finp" maxLength={100} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
                 </div>
                 <div className="frow" style={{ gridColumn: "1 / -1" }}>
                   <label className="flab">Notes</label>
-                  <textarea className="ftext" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Prep notes, agenda, or reminders…" style={{ minHeight: 60 }} />
+                  <LimitedTextarea className="ftext" maxLength={2000} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Prep notes, agenda, or reminders…" style={{ minHeight: 60 }} />
                 </div>
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>

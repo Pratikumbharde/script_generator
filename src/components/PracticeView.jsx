@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { S, nameOf, parseScriptKey, callModel } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES } from "../data/constants.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 import {
   Mic, MicOff, RotateCcw, Trophy, TrendingUp, Target, ArrowRight,
   Search, LayoutGrid, List, SlidersHorizontal, X, Eye, Trash2,
@@ -964,9 +965,10 @@ Evaluate the response.`;
                     </span>
                   </div>
                   <div style={{ position: "relative" }}>
-                    <textarea
+                    <LimitedTextarea
                       ref={textareaRef}
                       className="finp"
+                      maxLength={2000}
                       style={{
                         minHeight: 120,
                         resize: "vertical",

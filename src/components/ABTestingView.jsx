@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { listScripts, listScriptVariants, createScriptVariant, useScriptVariant, getVariantWinner, deleteScriptVariant } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
 
 export default function ABTestingView({ scripts: scriptsProp = [], products = [] }) {
   const [scripts, setScripts] = useState(scriptsProp)
@@ -90,8 +91,9 @@ export default function ABTestingView({ scripts: scriptsProp = [], products = []
       <div className="ps-card" style={{ marginBottom: 24 }}>
         <h3 className="ps-section-title">Add Variant</h3>
         <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <input
+          <LimitedInput
             className="ps-input"
+            maxLength={200}
             placeholder="Group name (e.g. 'Enterprise-Q3')"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}

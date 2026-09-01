@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { getOrganization, createOrganization, updateOrganization } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 export default function OrganizationView() {
   const [org, setOrg] = useState(null)
@@ -60,7 +62,7 @@ export default function OrganizationView() {
         <div className="ps-card" style={{ marginBottom: 24 }}>
           <h3 className="ps-section-title">Create Organization</h3>
           <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <input className="ps-input" placeholder="Organization name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <LimitedInput className="ps-input" maxLength={200} placeholder="Organization name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <select className="ps-select" value={form.billing_tier} onChange={(e) => setForm({ ...form, billing_tier: e.target.value })}>
               {tiers.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
             </select>
@@ -83,7 +85,7 @@ export default function OrganizationView() {
             <div className="ps-card" style={{ marginBottom: 24 }}>
               <h3 className="ps-section-title">Edit Organization</h3>
               <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <input className="ps-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <LimitedInput className="ps-input" maxLength={200} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 <select className="ps-select" value={form.billing_tier} onChange={(e) => setForm({ ...form, billing_tier: e.target.value })}>
                   {tiers.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                 </select>

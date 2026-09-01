@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { listVoiceDocs, createVoiceDoc, deleteVoiceDoc } from "../api/client.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const DOC_TYPES = [
   { id: "pitch_deck", label: "Pitch deck", icon: "📊" },
@@ -64,7 +66,7 @@ export default function VoiceDNA() {
             <div className="frow two">
               <div>
                 <label className="flab">Document name</label>
-                <input className="finp" placeholder="e.g. Q3 Pitch Deck" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <LimitedInput className="finp" maxLength={200} placeholder="e.g. Q3 Pitch Deck" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
               <div>
                 <label className="flab">Type</label>
@@ -75,11 +77,11 @@ export default function VoiceDNA() {
             </div>
             <div className="frow">
               <label className="flab">Content <span className="opt">(paste text, transcript, or key excerpts)</span></label>
-              <textarea className="ftext" placeholder="Paste the text here. For a pitch deck, paste the slides' bullet points. For an email, paste the full copy." value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+              <LimitedTextarea className="ftext" maxLength={10000} placeholder="Paste the text here. For a pitch deck, paste the slides' bullet points. For an email, paste the full copy." value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
             </div>
             <div className="frow">
               <label className="flab">Tags <span className="opt">(optional)</span></label>
-              <input className="finp" placeholder="enterprise, formal, technical" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+              <LimitedInput className="finp" maxLength={500} placeholder="enterprise, formal, technical" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button className="ps-btn pri" disabled={!form.name.trim() || !form.content.trim()} onClick={save}>Save document</button>

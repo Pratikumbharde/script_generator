@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { listFeedback, getWinningPatterns, createFeedback } from "../api/client.js";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 function StatCard({ label, value, sub }) {
   return (
@@ -201,16 +203,16 @@ export default function SelfImprovingAI() {
                   <div className={`ai-variant ${abVariantA === "default" ? "on" : ""}`}>
                     <div className="vname">Variant A</div>
                     <div className="vmeta">
-                      <input className="finp" value={abVariantA} onChange={(e) => setAbVariantA(e.target.value)} placeholder="Variant name (e.g. default)" />
+                      <LimitedInput className="finp" maxLength={100} value={abVariantA} onChange={(e) => setAbVariantA(e.target.value)} placeholder="Variant name (e.g. default)" />
                     </div>
-                    <textarea className="ftext" value={abNotesA} onChange={(e) => setAbNotesA(e.target.value)} placeholder="Notes: what changed in the prompt?" style={{ minHeight: 100 }} />
+                    <LimitedTextarea className="ftext" maxLength={2000} value={abNotesA} onChange={(e) => setAbNotesA(e.target.value)} placeholder="Notes: what changed in the prompt?" style={{ minHeight: 100 }} />
                   </div>
                   <div className={`ai-variant ${abVariantB !== "default" ? "on" : ""}`}>
                     <div className="vname">Variant B</div>
                     <div className="vmeta">
-                      <input className="finp" value={abVariantB} onChange={(e) => setAbVariantB(e.target.value)} placeholder="Variant name (e.g. v2-aggressive-open)" />
+                      <LimitedInput className="finp" maxLength={100} value={abVariantB} onChange={(e) => setAbVariantB(e.target.value)} placeholder="Variant name (e.g. v2-aggressive-open)" />
                     </div>
-                    <textarea className="ftext" value={abNotesB} onChange={(e) => setAbNotesB(e.target.value)} placeholder="Notes: what changed in the prompt?" style={{ minHeight: 100 }} />
+                    <LimitedTextarea className="ftext" maxLength={2000} value={abNotesB} onChange={(e) => setAbNotesB(e.target.value)} placeholder="Notes: what changed in the prompt?" style={{ minHeight: 100 }} />
                   </div>
                 </div>
 

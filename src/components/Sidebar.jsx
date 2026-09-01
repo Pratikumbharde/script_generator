@@ -186,6 +186,14 @@ export default function Sidebar({ view, setView, active, company, workspace, use
     return { ...group, items, label };
   }).filter(Boolean).filter((g) => g.items.length > 0);
 
+  // Bottom tab items for mobile
+  const BT_ITEMS = [
+    { id: "products", label: "Products", icon: Boxes },
+    { id: "studio", label: "Studio", icon: Play },
+    { id: "scripts", label: "Scripts", icon: FileText },
+    { id: "practice", label: "Practice", icon: Target },
+  ];
+
   return (
     <>
       {/* Mobile overlay */}
@@ -193,10 +201,35 @@ export default function Sidebar({ view, setView, active, company, workspace, use
         <div className="es-mobile-overlay" onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Mobile toggle */}
+      {/* Mobile toggle (hidden on mobile via CSS — "More" tab replaces it) */}
       <button className="es-mobile-toggle" onClick={() => setMobileOpen((o) => !o)} aria-label="Toggle menu">
         <Menu size={20} />
       </button>
+
+      {/* Bottom tab bar (mobile) */}
+      <div className="bt-bar">
+        {BT_ITEMS.map((tab) => {
+          const TabIcon = tab.icon;
+          const isActive = view === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`bt-item${isActive ? " es-active" : ""}`}
+              onClick={() => navigateTo(tab.id)}
+            >
+              <span className="bt-icon"><TabIcon size={18} strokeWidth={2} /></span>
+              {tab.label}
+            </button>
+          );
+        })}
+        <button
+          className={`bt-item${mobileOpen ? " es-active" : ""}`}
+          onClick={() => setMobileOpen((o) => !o)}
+        >
+          <span className="bt-icon"><Menu size={18} strokeWidth={2} /></span>
+          More
+        </button>
+      </div>
 
       {/* Sidebar */}
       <nav className={`es-sidebar ${collapsed ? "es-collapsed" : ""} ${mobileOpen ? "es-mobile-open" : ""}`} role="navigation" aria-label="Main navigation">

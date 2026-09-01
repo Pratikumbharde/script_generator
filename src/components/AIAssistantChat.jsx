@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { listChatSessions, createChatSession, deleteChatSession, getChatMessages, sendChatMessage } from '../api/client.js'
+import LimitedInput from './shared/LimitedInput.jsx'
 
 export default function AIAssistantChat() {
   const [sessions, setSessions] = useState([])
@@ -166,8 +167,9 @@ export default function AIAssistantChat() {
                 <div ref={messagesEndRef} />
               </div>
               <div style={{ padding: 12, borderTop: '1px solid var(--line-soft)', display: 'flex', gap: 8 }}>
-                <input
+                <LimitedInput
                   className="ps-input"
+                  maxLength={5000}
                   style={{ flex: 1 }}
                   placeholder="Ask me anything..."
                   value={input}

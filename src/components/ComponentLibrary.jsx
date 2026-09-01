@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { listComponents, createComponent, deleteComponent } from "../api/client.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
+import LimitedInput from './shared/LimitedInput.jsx'
+import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
 const COMPONENT_TYPES = [
   { id: "opening", label: "Opening", icon: "🚪", color: "#2B4CF0" },
@@ -93,7 +95,7 @@ export default function ComponentLibrary() {
             <div className="frow two">
               <div>
                 <label className="flab">Name</label>
-                <input className="finp" placeholder="e.g. Warm intro for SaaS" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <LimitedInput className="finp" maxLength={200} placeholder="e.g. Warm intro for SaaS" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
               <div>
                 <label className="flab">Type</label>
@@ -104,11 +106,11 @@ export default function ComponentLibrary() {
             </div>
             <div className="frow">
               <label className="flab">Content</label>
-              <textarea className="ftext" placeholder="Write the exact line you'd say on a call…" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+              <LimitedTextarea className="ftext" maxLength={2000} placeholder="Write the exact line you'd say on a call…" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
             </div>
             <div className="frow">
               <label className="flab">Tags <span className="opt">(comma-separated, optional)</span></label>
-              <input className="finp" placeholder="saas, enterprise, friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+              <LimitedInput className="finp" maxLength={500} placeholder="saas, enterprise, friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button className="ps-btn pri" disabled={!form.name.trim() || !form.content.trim()} onClick={save}>Save component</button>
