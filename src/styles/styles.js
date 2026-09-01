@@ -252,9 +252,6 @@ export const STYLES = `
 
 /* ===== script cockpit ===== */
 .cockpit{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
-.cockpit-sidebar{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
-.cockpit-sidebar::-webkit-scrollbar{width:4px}
-.cockpit-sidebar::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 .script-col{min-width:0}
 .script-head{background:var(--ink);color:#fff;border-radius:16px;padding:20px 22px;margin-bottom:16px}
 .script-head .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8AA0FF;margin-bottom:9px}
@@ -362,7 +359,7 @@ export const STYLES = `
 @media(max-width:640px){.two-sel{grid-template-columns:1fr}}
 
 /* objections panel */
-.obj-panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0;overflow:hidden}
+.obj-panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:hidden}
 .obj-head{padding:16px 18px;border-bottom:1px solid var(--line-soft);background:var(--amber-bg)}
 .obj-head .t{font-family:'Space Grotesk';font-weight:700;font-size:15px;color:var(--amber);display:flex;align-items:center;gap:8px}
 .obj-head .s{font-size:12px;color:#9A7A3E;margin-top:3px}
@@ -674,7 +671,6 @@ export const STYLES = `
   .pd-top{padding:18px 18px 0}
   .pd-tabs{padding:0 18px}
   .cockpit{grid-template-columns:1fr}
-  .cockpit-sidebar{position:static;max-height:none;overflow:visible}
   .obj-panel{position:static}
   .method-grid,.ct-grid{grid-template-columns:1fr}
   .ps-grid{grid-template-columns:1fr}
@@ -965,7 +961,7 @@ export const STYLES = `
 
 /* P5.2: Print styles */
 @media print{
-  .ps-shell,.ps-side,.ps-top,.lang-switcher,.genbar,.ps-btn,.call-btn,.call-controls,.obj-panel,.cockpit-sidebar,.ps-card,.overlay,.modal{display:none !important}
+  .ps-shell,.ps-side,.ps-top,.lang-switcher,.genbar,.ps-btn,.call-btn,.call-controls,.obj-panel,.ps-card,.overlay,.modal{display:none !important}
   .ps-main{display:block !important}
   .ps-body{padding:0 !important}
   .print-overlay{display:block !important;position:static !important}

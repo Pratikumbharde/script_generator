@@ -640,50 +640,51 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             })}
           </div>
 
-          <div className="cockpit-sidebar">
-            <ObjectionPanel objections={primaryScript.objections || []} editing={editing} editScript={editScript} setEditScript={setEditScript} />
+          <ObjectionPanel objections={primaryScript.objections || []} editing={editing} editScript={editScript} setEditScript={setEditScript} />
+        </div>
+      </div>
 
-            {/* Outcome tracking */}
-            <div className="ps-card" style={{ marginTop: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>How did this call go?</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "#6B7B93" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
-                      <button
-                        key={o.id}
-                        className={`ps-btn ${outcome === o.id ? "pri" : "ghost"}`}
-                        style={outcome === o.id ? { background: o.color, borderColor: o.color, color: "#fff" } : {}}
-                        onClick={() => saveOutcome(o.id)}
-                        disabled={savingMeta}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <button className="ps-btn ghost" onClick={markUsed} disabled={savingMeta}>
-                  {usedAt ? `Used ${new Date(usedAt).toLocaleDateString()}` : "Mark as used"}
+      {/* Outcome tracking */}
+      <div className="ps-card" style={{ marginTop: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>How did this call go?</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "#6B7B93" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
+                <button
+                  key={o.id}
+                  className={`ps-btn ${outcome === o.id ? "pri" : "ghost"}`}
+                  style={outcome === o.id ? { background: o.color, borderColor: o.color, color: "#fff" } : {}}
+                  onClick={() => saveOutcome(o.id)}
+                  disabled={savingMeta}
+                >
+                  {o.label}
                 </button>
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <label style={{ fontSize: 13, color: "var(--muted)", display: "block", marginBottom: 6 }}>Post-call notes</label>
-                <textarea
-                  className="finp"
-                  style={{ minHeight: 60, resize: "vertical", width: "100%" }}
-                  placeholder="What worked? What didn't? Any buyer objections you didn't expect?"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={() => saveNotes(notes)}
-                />
-              </div>
-            </div>
-
-            {/* Script Comments */}
-            <div className="ps-card" style={{ marginTop: 20 }}>
-              <ScriptComments scriptId={script.id || 0} userEmail={user?.email || ""} />
+              ))}
             </div>
           </div>
+          <button className="ps-btn ghost" onClick={markUsed} disabled={savingMeta}>
+            {usedAt ? `Used ${new Date(usedAt).toLocaleDateString()}` : "Mark as used"}
+          </button>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontSize: 13, color: "var(--muted)", display: "block", marginBottom: 6 }}>Post-call notes</label>
+          <textarea
+            className="finp"
+            style={{ minHeight: 60, resize: "vertical", width: "100%" }}
+            placeholder="What worked? What didn't? Any buyer objections you didn't expect?"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => saveNotes(notes)}
+          />
+        </div>
+      </div>
+
+      {/* Script Comments */}
+      <div className="ps-card" style={{ marginTop: 20 }}>
+        <ScriptComments scriptId={script.id || 0} userEmail={user?.email || ""} />
+      </div>
+    </div>
 
       {/* Regenerate modal */}
       {confirmRegen && (
