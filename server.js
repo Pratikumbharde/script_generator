@@ -4591,7 +4591,7 @@ app.post('/api/team/invite/accept', (req, res) => {
 })
 
 /* ---------- SPA fallback — serve index.html for all non-API routes ---------- */
-app.get('*', (req, res) => {
+app.get('/{*splat}', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(DIST_PATH, 'index.html'))
   }
