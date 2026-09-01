@@ -41,11 +41,15 @@ const LeaderboardView       = lazy(() => import("./src/components/LeaderboardVie
    ============================================================ */
 
 export default function PitchStudio() {
-  const { user, workspace, loading: authLoading, logout } = useAuth();
+  const { user, workspace, loading: authLoading, logout, canGenerate } = useAuth();
 
   const [ready, setReady] = useState(false);
   const [company, setCompany] = useState("");
-  const [view, setView] = useState("products"); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap
+  const [view, setView] = useState(() => {
+    // Members default to scripts view
+    const saved = localStorage.getItem('ps_view');
+    return saved || 'products';
+  }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [active, setActive] = useState(null); // active product for studio
@@ -90,6 +94,14 @@ export default function PitchStudio() {
   const refreshStaff = async () => setStaff(await S.list("pstaff:"));
   const openStudio = (product, ps = null) => { setActive(product); setPreset(ps); setStudioNonce((n) => n + 1); setView("studio"); };
   const teamLanguages = [...new Set(staff.flatMap((s) => s.languages || ["en"]))];
+  const isMember = user?.role === 'member';
+
+  // Redirect members to scripts view on mount if they're on products/studio
+  useEffect(() => {
+    if (user && isMember && (view === 'products' || view === 'product' || view === 'add')) {
+      setView('scripts');
+    }
+  }, [user, isMember]);
 
   if (authLoading) return (
     <div className="ps-root"><style>{STYLES}</style>
@@ -121,7 +133,7 @@ export default function PitchStudio() {
   return (
     <div className="ps-root"><style>{STYLES}</style>
       <div className="ps-shell">
-        <Sidebar view={view} setView={setView} active={active} company={company} workspace={workspace} user={user} logout={logout} />
+        <Sidebar view={view} setView={setView} active={active} company={company} workspace={workspace} user={user} logout={logout} canGenerate={canGenerate} />
 
         <main className="ps-main">
           <Suspense fallback={<div style={{ padding: 40 }}><CardSkeleton count={4} /></div>}>
@@ -146,7 +158,7 @@ export default function PitchStudio() {
             <ProductForm product={editingProduct} onCancel={() => { setEditingProduct(null); setView("products"); }} onSaved={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} />
           )}
           {view === "studio" && active && (
-            <StudioView key={active.id + "-" + studioNonce} product={active} preset={preset} teamLanguages={teamLanguages} staff={staff} onBack={() => setView("products")} />
+            <StudioView key={active.id + "-" + studioNonce} product={active} preset={preset} teamLanguages={teamLanguages} staff={staff} onBack={() => setView("products")} canGenerate={canGenerate} />
           )}
           {view === "scripts" && (
             <ScriptsView products={products} teamLanguages={teamLanguages}
@@ -155,7 +167,7 @@ export default function PitchStudio() {
               onGoStudio={() => products[0] ? openStudio(products[0]) : setView("products")} />
           )}
           {view === "team" && (
-            <TeamView company={company} staff={staff} products={products} workspace={workspace} onSaveCompany={saveCompany} onRefresh={refreshStaff} />
+            <TeamView company={company} staff={staff} products={products} workspace={workspace} onSaveCompany={saveCompany} onRefresh={refreshStaff} user={user} canGenerate={canGenerate} />
           )}
           {view === "training" && (
             <TrainingView />

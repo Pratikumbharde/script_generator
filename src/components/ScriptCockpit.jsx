@@ -29,7 +29,7 @@ function useOutsideClick(ref, handler) {
   }, [ref, handler]);
 }
 
-export default function Cockpit({ product, method, callType, duration, meta, script, opts, onBack, onChangeSetup, onRegenerate, regenerating }) {
+export default function Cockpit({ product, method, callType, duration, meta, script, opts, onBack, onChangeSetup, onRegenerate, regenerating, readOnly }) {
   const { user } = useAuth();
   const primaryLang = opts?.language || "en";
   const [callMode, setCallMode] = useState(false);
@@ -286,6 +286,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           <div className="ps-eyebrow">{product.name}</div>
           <div className="ps-title">{callType.name} · {duration} min</div>
           <div className="ps-sub">
+            {readOnly && <span className="chip n" style={{ background: "#B5720F", color: "#fff", marginRight: 8, fontSize: 11 }}>Read-only</span>}
             <span className="dt-pill" style={{ fontSize: 11, padding: "2px 8px", verticalAlign: "middle", marginRight: 6 }}>
               {method.name}
             </span>
@@ -293,7 +294,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           </div>
         </div>
         <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
-          {!editing && <button className="ps-btn ghost sm" onClick={startEditing}><Pencil size={14} /> Edit</button>}
+          {!readOnly && !editing && <button className="ps-btn ghost sm" onClick={startEditing}><Pencil size={14} /> Edit</button>}
           {editing && (
             <>
               <button className="ps-btn pri sm" onClick={saveEdits} disabled={saving}>
@@ -302,11 +303,12 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
               <button className="ps-btn ghost sm" onClick={cancelEditing} disabled={saving}>Cancel</button>
             </>
           )}
-          <button className="ps-btn ghost sm" onClick={onChangeSetup}>Change setup</button>
-          <button className="ps-btn ghost sm" onClick={() => setConfirmRegen(true)}>↻ Regenerate</button>
+          {!readOnly && <button className="ps-btn ghost sm" onClick={onChangeSetup}>Change setup</button>}
+          {!readOnly && <button className="ps-btn ghost sm" onClick={() => setConfirmRegen(true)}>↻ Regenerate</button>}
           <button className="ps-btn pri" onClick={() => setCallMode(true)}>
             <Phone size={15} /> Call Mode
           </button>
+          {!readOnly && (
           <div className="dt-actions" ref={menuRef}>
             <button className="dt-more-btn" onClick={() => setMenuOpen((s) => !s)} title="More actions">
               <MoreHorizontal size={16} />
@@ -325,6 +327,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 

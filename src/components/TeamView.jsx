@@ -1,107 +1,262 @@
 import React, { useState, useEffect } from "react";
 import { S, slug } from "../utils/helpers.js";
 import { LANGUAGES } from "../data/constants.js";
-import { updateWorkspace, inviteMember, joinWorkspace, listApiKeys, createApiKey, deleteApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, listCrmConnections, createCrmConnection, deleteCrmConnection } from "../api/client.js";
+import {
+  updateWorkspace, inviteMember, joinWorkspace,
+  listApiKeys, createApiKey, deleteApiKey,
+  listWebhooks, createWebhook, updateWebhook, deleteWebhook,
+  listCrmConnections, createCrmConnection, deleteCrmConnection,
+  getTeam, updateTeamRole, inviteTeamMember, assignScript, unassignScript, listScripts
+} from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import {
+  Users, Shield, UserPlus, Mail, ChevronDown, X, FileText, MoreHorizontal, Check
+} from "lucide-react";
 
-export default function TeamView({ company, staff, products, workspace, onSaveCompany, onRefresh }) {
-  const [coName, setCoName] = useState(company);
-  const [adding, setAdding] = useState(false);
-  const [nf, setNf] = useState({ name: "", role: "Sales Rep", access: [], languages: ["en"] });
+/* ============================================================
+   TeamView — RBAC team management page
+   Shows team members, roles, invite, and script assignment
+   ============================================================ */
 
-  const addStaff = async () => {
-    const id = slug(nf.name) + "-" + Math.random().toString(36).slice(2, 5);
-    await S.set(`pstaff:${id}`, { ...nf, id });
-    setNf({ name: "", role: "Sales Rep", access: [], languages: ["en"] }); setAdding(false); onRefresh();
+export default function TeamView({ company, staff, products, workspace, onSaveCompany, onRefresh, user, canGenerate }) {
+  const { setWorkspace } = useAuth();
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState("");
+  const [inviteErr, setInviteErr] = useState("");
+  const [roleMenuOpen, setRoleMenuOpen] = useState(null);
+  const [roleSaving, setRoleSaving] = useState(null);
+  const [scripts, setScripts] = useState([]);
+  const [assignMenuOpen, setAssignMenuOpen] = useState(null);
+
+  const isAdmin = user?.role === "admin";
+
+  useEffect(() => {
+    loadMembers();
+    loadScripts();
+  }, []);
+
+  const loadMembers = async () => {
+    setMembersLoading(true);
+    try {
+      const m = await getTeam();
+      setMembers(m);
+    } catch (e) {
+      // Fallback to workspace members
+      setMembers(workspace?.members || []);
+    } finally {
+      setMembersLoading(false);
+    }
   };
-  const removeStaff = async (id) => { await S.del(`pstaff:${id}`); onRefresh(); };
-  const toggleAccess = (pid) => setNf((f) => ({ ...f, access: f.access.includes(pid) ? f.access.filter((x) => x !== pid) : [...f.access, pid] }));
-  const toggleLang = (lid) => setNf((f) => ({ ...f, languages: f.languages.includes(lid) ? f.languages.filter((x) => x !== lid) : [...f.languages, lid] }));
+
+  const loadScripts = async () => {
+    try {
+      const s = await listScripts();
+      setScripts(s);
+    } catch (e) {
+      setScripts([]);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviteBusy(true);
+    setInviteMsg("");
+    setInviteErr("");
+    try {
+      const data = await inviteTeamMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
+      setInviteMsg(data.message || "Invite sent successfully");
+      setInviteEmail("");
+      setInviteName("");
+      setInviteRole("member");
+      loadMembers();
+    } catch (e) {
+      setInviteErr(e.message || "Failed to send invite");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const handleRoleChange = async (userId, newRole) => {
+    setRoleSaving(userId);
+    try {
+      await updateTeamRole(userId, newRole);
+      setMembers((prev) => prev.map((m) => m.id === userId ? { ...m, role: newRole } : m));
+      setRoleMenuOpen(null);
+    } catch (e) {
+      alert(e.message || "Failed to update role");
+    } finally {
+      setRoleSaving(null);
+    }
+  };
+
+  const getScriptCountForMember = (memberId) => {
+    // Count scripts assigned to this member from the workspace members data
+    const member = members.find((m) => m.id === memberId);
+    return member?.script_count || member?.assigned_scripts?.length || 0;
+  };
+
+  const coName = company;
+  const [coNameEdit, setCoNameEdit] = useState(coName);
+  const wsMembers = workspace?.members || [];
+  const wsPending = workspace?.pending || [];
+  const isOwner = workspace?.role === "owner" || workspace?.role === "admin";
+
+  // Merge API members with workspace members for display
+  const displayMembers = members.length > 0 ? members : wsMembers;
+
+  const roleBadgeStyle = (role) => {
+    if (role === "admin") return { background: "var(--accent)", color: "#fff" };
+    if (role === "manager") return { background: "#2B4CF0", color: "#fff" };
+    return { background: "var(--bg-soft)", color: "var(--muted)" };
+  };
 
   return (
     <>
       <div className="ps-top">
         <div>
-          <div className="ps-eyebrow">Workspace</div>
-          <div className="ps-title">Team</div>
-          <div className="ps-sub">Each rep's spoken languages drive which scripts get generated for them. Add a language here and it becomes available across the workspace.</div>
+          <div className="ps-eyebrow">Team</div>
+          <div className="ps-title">Team Management</div>
+          <div className="ps-sub">Manage your team members, their roles, and script assignments.</div>
         </div>
-        {!adding && <button className="ps-btn pri" onClick={() => setAdding(true)}>＋ Add teammate</button>}
+        {isAdmin && !showInvite && (
+          <button className="ps-btn pri" onClick={() => setShowInvite(true)}>
+            <UserPlus size={16} /> Invite Member
+          </button>
+        )}
       </div>
-      <div className="ps-body" style={{ maxWidth: 720 }}>
-        <div className="ps-card" style={{ marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label className="flab">Company name</label>
-            <input className="finp" value={coName} onChange={(e) => setCoName(e.target.value)} placeholder="Your company" />
-          </div>
-          <button className="ps-btn ghost" disabled={!coName.trim() || coName === company} onClick={() => onSaveCompany(coName.trim())}>Save</button>
-        </div>
 
-        {adding && (
-          <div className="ps-form" style={{ marginBottom: 20, maxWidth: "none" }}>
-            <div className="frow two">
-              <div><label className="flab">Name</label><input className="finp" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} placeholder="Full name" /></div>
-              <div><label className="flab">Role</label>
-                <select className="fsel" value={nf.role} onChange={(e) => setNf({ ...nf, role: e.target.value })}>
-                  <option>Sales Rep</option><option>SDR</option><option>Account Executive</option><option>Sales Manager</option><option>Admin</option>
-                </select>
+      <div className="ps-body" style={{ maxWidth: 900 }}>
+        {/* Invite modal */}
+        {showInvite && (
+          <div className="ps-card" style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Invite a Team Member</div>
+              <button className="ps-btn ghost sm" onClick={() => { setShowInvite(false); setInviteMsg(""); setInviteErr(""); }}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="frow two" style={{ marginBottom: 12 }}>
+              <div>
+                <label className="flab">Email address</label>
+                <input className="finp" placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+              </div>
+              <div>
+                <label className="flab">Name (optional)</label>
+                <input className="finp" placeholder="Full name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
               </div>
             </div>
-            <div className="frow">
-              <label className="flab">Languages spoken <span className="opt">(pick all)</span></label>
-              <div className="pill-row">
-                {LANGUAGES.map((l) => (
-                  <div key={l.id} className={`pill ${nf.languages.includes(l.id) ? "on" : ""}`} onClick={() => toggleLang(l.id)}>{l.name}</div>
-                ))}
-              </div>
-              <div className="fhint">Scripts can be generated in each of these when this rep is on the team.</div>
-            </div>
-            <div className="frow">
-              <label className="flab">Product access</label>
-              {products.length === 0 ? <div className="fhint">Add products first to scope access.</div> : (
-                <div className="pill-row">
-                  {products.map((p) => (
-                    <div key={p.id} className={`pill ${nf.access.includes(p.id) ? "on" : ""}`} onClick={() => toggleAccess(p.id)}>{p.name}</div>
-                  ))}
-                </div>
-              )}
+            <div style={{ marginBottom: 12 }}>
+              <label className="flab">Role</label>
+              <select className="fsel" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                <option value="member">Member — Can view assigned scripts</option>
+                <option value="manager">Manager — Can generate scripts & manage team</option>
+              </select>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="ps-btn pri" disabled={!nf.name.trim() || nf.languages.length === 0} onClick={addStaff}>Add teammate</button>
-              <button className="ps-btn ghost" onClick={() => setAdding(false)}>Cancel</button>
+              <button className="ps-btn pri" disabled={!inviteEmail.trim() || inviteBusy} onClick={handleInvite}>
+                {inviteBusy ? "Sending…" : "Send Invite"}
+              </button>
+              <button className="ps-btn ghost" onClick={() => { setShowInvite(false); setInviteMsg(""); setInviteErr(""); }}>Cancel</button>
             </div>
+            {inviteMsg && <div style={{ color: "var(--ok)", fontSize: 13, marginTop: 10 }}>{inviteMsg}</div>}
+            {inviteErr && <div className="err" style={{ marginTop: 10 }}>{inviteErr}</div>}
           </div>
         )}
 
-        {staff.length === 0 && !adding ? (
-          <div className="ps-empty"><div className="big">No teammates yet</div><p>Add the reps on your team, mark which languages they speak, and choose which products each one can pull scripts for.</p><button className="ps-btn pri" onClick={() => setAdding(true)}>＋ Add teammate</button></div>
-        ) : (
-          staff.map((s) => (
-            <div key={s.id} className="staff">
-              <div className="avatar">{s.name.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()}</div>
-              <div className="info">
-                <div className="nm">{s.name}</div>
-                <div className="rl">{s.role}</div>
-                <div className="acc">
-                  🗣 {(s.languages || ["en"]).map((id) => (LANGUAGES.find((l) => l.id === id) || {}).name).filter(Boolean).join(", ") || "English"}
-                  {" · "}
-                  {s.access?.length ? `Products: ${s.access.map((id) => products.find((p) => p.id === id)?.name).filter(Boolean).join(", ")}` : "No products assigned"}
-                </div>
-              </div>
-              <button className="ps-btn danger sm" onClick={() => removeStaff(s.id)}>Remove</button>
+        {/* Members list */}
+        <div className="ps-card" style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
+            <Users size={18} style={{ verticalAlign: -3, marginRight: 6 }} />
+            Team Members ({displayMembers.length})
+          </div>
+
+          {membersLoading ? (
+            <div style={{ padding: 20, textAlign: "center", color: "var(--muted)" }}>
+              <div className="ring" style={{ margin: "0 auto" }} />
+              <div style={{ marginTop: 8 }}>Loading team…</div>
             </div>
-          ))
-        )}
+          ) : displayMembers.length === 0 ? (
+            <div className="ps-empty" style={{ padding: 30 }}>
+              <div className="big">No team members yet</div>
+              <p>Invite your first team member to get started.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 0 }}>
+              {displayMembers.map((m) => {
+                const memberId = m.id || m.email;
+                const mRole = m.role || "member";
+                const scriptCount = getScriptCountForMember(memberId);
+                return (
+                  <div key={memberId} style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "12px 0",
+                    borderBottom: "1px solid var(--line-soft)"
+                  }}>
+                    <div className="avatar" style={{ width: 36, height: 36, fontSize: 13, flexShrink: 0 }}>
+                      {(m.name || m.email || "?").split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>
+                        {m.name || m.email?.split("@")[0] || "Member"}
+                      </div>
+                      <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                        {m.email}
+                        {scriptCount > 0 && <span> · {scriptCount} script{scriptCount !== 1 ? "s" : ""} assigned</span>}
+                      </div>
+                    </div>
 
-        {/* P1.3: Workspace management */}
-        <div className="ps-card" style={{ marginTop: 24 }}>
+                    {/* Role badge & dropdown */}
+                    <div style={{ position: "relative" }}>
+                      {isAdmin && mRole !== "owner" ? (
+                        <>
+                          <button
+                            className="ps-btn ghost sm"
+                            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                            onClick={() => setRoleMenuOpen(roleMenuOpen === memberId ? null : memberId)}
+                          >
+                            <span className="chip n" style={roleBadgeStyle(mRole)}>{mRole}</span>
+                            {roleSaving === memberId ? <span className="spinner dark" /> : <ChevronDown size={12} />}
+                          </button>
+                          {roleMenuOpen === memberId && (
+                            <div style={{
+                              position: "absolute", right: 0, top: "100%", marginTop: 4,
+                              background: "#fff", border: "1px solid var(--line-soft)", borderRadius: 8,
+                              boxShadow: "0 8px 24px rgba(0,0,0,.12)", zIndex: 50, minWidth: 160
+                            }}>
+                              {["admin", "manager", "member"].map((r) => (
+                                <button key={r} className="dt-dropdown-item" style={{ width: "100%", textAlign: "left" }}
+                                  onClick={() => handleRoleChange(memberId, r)}>
+                                  <span className="chip n" style={roleBadgeStyle(r)}>{r}</span>
+                                  {mRole === r && <Check size={14} style={{ marginLeft: 8, color: "var(--ok)" }} />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="chip n" style={roleBadgeStyle(mRole)}>{mRole}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Workspace settings (existing) */}
+        <div className="ps-card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>Workspace settings</div>
-
           <WorkspaceSettings workspace={workspace} />
         </div>
 
-        {/* P1.4: Integrations */}
-        <div className="ps-card" style={{ marginTop: 24 }}>
+        {/* Integrations (existing) */}
+        <div className="ps-card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>Integrations</div>
           <IntegrationsSettings />
         </div>
@@ -114,6 +269,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
   );
 }
 
+/* ---------- Workspace Settings sub-component (preserved from original) ---------- */
 function WorkspaceSettings({ workspace }) {
   const { setWorkspace } = useAuth();
   const [wsName, setWsName] = useState(workspace?.name || "");
@@ -176,7 +332,7 @@ function WorkspaceSettings({ workspace }) {
       </div>
 
       {isOwner && (
-    <>
+        <>
           <div style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 16, marginBottom: 16 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Invite teammates</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -238,6 +394,7 @@ function WorkspaceSettings({ workspace }) {
   );
 }
 
+/* ---------- Integrations sub-component (preserved from original) ---------- */
 function IntegrationsSettings() {
   const [keys, setKeys] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
@@ -248,7 +405,6 @@ function IntegrationsSettings() {
   const [whSecret, setWhSecret] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // P3.1: CRM
   const [crms, setCrms] = useState([]);
   const [crmType, setCrmType] = useState("zapier");
   const [crmUrl, setCrmUrl] = useState("");
@@ -259,18 +415,9 @@ function IntegrationsSettings() {
   }, []);
 
   const loadData = async () => {
-    try {
-      const k = await listApiKeys();
-      setKeys(k);
-    } catch (_) {}
-    try {
-      const w = await listWebhooks();
-      setWebhooks(w);
-    } catch (_) {}
-    try {
-      const c = await listCrmConnections();
-      setCrms(c);
-    } catch (_) {}
+    try { const k = await listApiKeys(); setKeys(k); } catch (_) {}
+    try { const w = await listWebhooks(); setWebhooks(w); } catch (_) {}
+    try { const c = await listCrmConnections(); setCrms(c); } catch (_) {}
   };
 
   const generateKey = async () => {
@@ -280,11 +427,8 @@ function IntegrationsSettings() {
       setNewKeyValue(data.key);
       setNewKeyName("");
       loadData();
-    } catch (e) {
-      console.error("Failed to create key:", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error("Failed to create key:", e); }
+    finally { setLoading(false); }
   };
 
   const removeKey = async (id) => {
@@ -300,11 +444,8 @@ function IntegrationsSettings() {
       await createWebhook({ url: whUrl.trim(), events: whEvents, secret: whSecret || undefined });
       setWhUrl(""); setWhEvents("script.completed,script.used"); setWhSecret("");
       loadData();
-    } catch (e) {
-      console.error("Failed to create webhook:", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error("Failed to create webhook:", e); }
+    finally { setLoading(false); }
   };
 
   const toggleWebhook = async (wh) => {
@@ -325,11 +466,8 @@ function IntegrationsSettings() {
       await createCrmConnection({ crm_type: crmType, webhook_url: crmUrl.trim(), api_token: crmToken || undefined });
       setCrmUrl(""); setCrmToken(""); setCrmType("zapier");
       loadData();
-    } catch (e) {
-      console.error("Failed to connect CRM:", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error("Failed to connect CRM:", e); }
+    finally { setLoading(false); }
   };
 
   const removeCrm = async (id) => {
@@ -340,28 +478,21 @@ function IntegrationsSettings() {
 
   return (
     <>
-      {/* API Keys */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>API Keys</div>
-        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
-          Use these to generate scripts from your CRM, Zapier, or internal tools.
-        </div>
-
+        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>Use these to generate scripts from your CRM, Zapier, or internal tools.</div>
         {keys.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             {keys.map((k) => (
               <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, padding: "8px 0", borderBottom: "1px solid var(--line-soft)" }}>
                 <span style={{ fontWeight: 600 }}>{k.name}</span>
                 <span style={{ color: "var(--faint)", fontFamily: "monospace", fontSize: 12 }}>{k.scopes}</span>
-                <span style={{ color: "var(--faint)", marginLeft: "auto" }}>
-                  {k.last_used_at ? `Used ${new Date(k.last_used_at).toLocaleDateString()}` : "Never used"}
-                </span>
+                <span style={{ color: "var(--faint)", marginLeft: "auto" }}>{k.last_used_at ? `Used ${new Date(k.last_used_at).toLocaleDateString()}` : "Never used"}</span>
                 <button className="ps-btn danger sm" onClick={() => removeKey(k.id)}>Revoke</button>
               </div>
             ))}
           </div>
         )}
-
         {newKeyValue && (
           <div className="err" style={{ background: "#E8F6EF", borderColor: "#12A374", color: "#0B7A5B", marginBottom: 12 }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Key created — copy it now:</div>
@@ -369,7 +500,6 @@ function IntegrationsSettings() {
             <div style={{ fontSize: 12, marginTop: 6 }}>This is the only time it is shown.</div>
           </div>
         )}
-
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <input className="finp" placeholder="Key name (e.g. Zapier)" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
@@ -378,13 +508,9 @@ function IntegrationsSettings() {
         </div>
       </div>
 
-      {/* Webhooks */}
       <div style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Webhooks</div>
-        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
-          Get notified when scripts are completed or used.
-        </div>
-
+        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>Get notified when scripts are completed or used.</div>
         {webhooks.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             {webhooks.map((wh) => (
@@ -400,7 +526,6 @@ function IntegrationsSettings() {
             ))}
           </div>
         )}
-
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <input className="finp" placeholder="https://your-app.com/webhooks/pitch-studio" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
@@ -411,13 +536,9 @@ function IntegrationsSettings() {
         </div>
       </div>
 
-      {/* P3.1: CRM Integration */}
       <div style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 16, marginTop: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>CRM Integration</div>
-        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
-          Log script usage back to your CRM. Works with Zapier, Make, or direct CRM webhooks.
-        </div>
-
+        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>Log script usage back to your CRM.</div>
         {crms.length > 0 && (
           <div style={{ marginBottom: 14 }}>
             {crms.map((c) => (
@@ -430,7 +551,6 @@ function IntegrationsSettings() {
             ))}
           </div>
         )}
-
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <select className="fsel" value={crmType} onChange={(e) => setCrmType(e.target.value)} style={{ maxWidth: 160 }}>
             <option value="salesforce">Salesforce</option>

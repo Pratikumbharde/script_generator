@@ -42,8 +42,10 @@ export function AuthProvider({ children }) {
     setWorkspace(null)
   }
 
+  const canGenerate = user?.role === 'admin' || user?.role === 'manager'
+
   return (
-    <AuthContext.Provider value={{ user, workspace, loading, setAuth, setWorkspace: setWorkspaceData, logout: doLogout }}>
+    <AuthContext.Provider value={{ user, workspace, loading, setAuth, setWorkspace: setWorkspaceData, logout: doLogout, canGenerate }}>
       {children}
     </AuthContext.Provider>
   )

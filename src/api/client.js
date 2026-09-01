@@ -761,3 +761,34 @@ export async function duplicateEmailTemplate(id) {
 export async function testSmtp(data) {
   return fetchJson('/email/test-smtp', { method: 'POST', body: JSON.stringify(data) }).then((r) => r)
 }
+
+/* ---------- RBAC: team & script assignments ---------- */
+export async function getTeam() {
+  const data = await fetchJson('/team')
+  return data.members || []
+}
+
+export async function updateTeamRole(userId, role) {
+  const data = await fetchJson(`/team/${userId}/role`, { method: 'PUT', body: JSON.stringify({ role }) })
+  return data
+}
+
+export async function assignScript(scriptId, userIds) {
+  const data = await fetchJson(`/scripts/${scriptId}/assign`, { method: 'POST', body: JSON.stringify({ userIds }) })
+  return data
+}
+
+export async function unassignScript(scriptId, userId) {
+  const data = await fetchJson(`/scripts/${scriptId}/assign/${userId}`, { method: 'DELETE' })
+  return data
+}
+
+export async function getAssignedScripts() {
+  const data = await fetchJson('/scripts/assigned')
+  return data.scripts || []
+}
+
+export async function inviteTeamMember(email, role, name) {
+  const data = await fetchJson('/team/invite', { method: 'POST', body: JSON.stringify({ email, role, name }) })
+  return data
+}

@@ -116,7 +116,7 @@ function getInitials(email) {
   return email.slice(0, 2).toUpperCase();
 }
 
-export default function Sidebar({ view, setView, active, company, workspace, user, logout }) {
+export default function Sidebar({ view, setView, active, company, workspace, user, logout, canGenerate }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("ps_sidebar_collapsed") === "true"; } catch { return false; }
   });
@@ -156,6 +156,36 @@ export default function Sidebar({ view, setView, active, company, workspace, use
     setMobileOpen(false);
   }, [setView, active]);
 
+  const isMember = !canGenerate; // canGenerate is true for admin/manager, false for member
+
+  // Filter nav groups based on role
+  const filteredGroups = NAV_GROUPS.map((group) => {
+    let items = group.items;
+    let label = group.label;
+    if (isMember) {
+      // Members only see "Scripts" in the sell group, renamed to "My Scripts"
+      if (group.id === 'sell') {
+        items = items.filter((item) => item.id === 'scripts');
+        label = 'My Scripts';
+      }
+      // Members don't see Team group at all
+      if (group.id === 'team') {
+        return null;
+      }
+      // Members don't see Admin group
+      if (group.id === 'admin') {
+        return null;
+      }
+    } else {
+      // Non-members (admin/manager) see Team nav item but not "Permissions" unless admin
+      if (group.id === 'team') {
+        // Keep team visible for admin/manager
+        items = items.filter((item) => item.id !== 'permissions' || user?.role === 'admin');
+      }
+    }
+    return { ...group, items, label };
+  }).filter(Boolean).filter((g) => g.items.length > 0);
+
   return (
     <>
       {/* Mobile overlay */}
@@ -191,7 +221,7 @@ export default function Sidebar({ view, setView, active, company, workspace, use
 
         {/* Nav groups */}
         <div className="es-nav-scroll">
-          {NAV_GROUPS.map((group) => (
+          {filteredGroups.map((group) => (
             <div key={group.id} className="es-section">
               <button
                 className={`es-group-header ${expandedGroups.has(group.id) ? "es-expanded" : ""}`}

@@ -1,11 +1,106 @@
 import React, { useState, useEffect, useRef } from "react";
 import { METHODS, CALL_TYPES, CALL_METHODS, DURATIONS, LANGUAGES, REGIONS, DELIVERY, PERSONA_TEMPLATES, TONE_COLOR, methodsFor, durationsFor, durationHintFor } from "../data/constants.js";
 import { S, slug, scriptKey, generateScript, generateScriptStream } from "../utils/helpers.js";
-import { getVoiceContext } from "../api/client.js";
+import { getVoiceContext, getAssignedScripts } from "../api/client.js";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import Cockpit from "./ScriptCockpit.jsx";
 
-export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack }) {
+export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true }) {
+  // Member read-only mode: show assigned scripts
+  const [assignedScripts, setAssignedScripts] = useState([]);
+  const [assignedLoading, setAssignedLoading] = useState(false);
+  const [selectedAssigned, setSelectedAssigned] = useState(null);
+
+  useEffect(() => {
+    if (canGenerate) return;
+    setAssignedLoading(true);
+    getAssignedScripts()
+      .then((scripts) => setAssignedScripts(scripts))
+      .catch(() => setAssignedScripts([]))
+      .finally(() => setAssignedLoading(false));
+  }, [canGenerate]);
+
+  // Member view: list of assigned scripts
+  if (!canGenerate) {
+    return (
+      <>
+        <div className="ps-top">
+          <div>
+            <div className="ps-eyebrow">My Scripts</div>
+            <div className="ps-title">Assigned Scripts</div>
+            <div className="ps-sub">Scripts that have been assigned to you by your team lead or manager.</div>
+          </div>
+        </div>
+        <div className="ps-body" style={{ maxWidth: 900 }}>
+          {assignedLoading ? (
+            <div className="ps-card" style={{ padding: 40, textAlign: "center" }}>
+              <div className="loading-box"><div className="ring" /><div className="msg">Loading your scripts…</div></div>
+            </div>
+          ) : assignedScripts.length === 0 ? (
+            <div className="ps-empty">
+              <div className="big">No scripts assigned yet</div>
+              <p>Your team lead or manager will assign scripts to you. Check back soon.</p>
+            </div>
+          ) : selectedAssigned ? (
+            <div>
+              <div className="crumb" onClick={() => setSelectedAssigned(null)}>← Back to my scripts</div>
+              <Cockpit
+                product={selectedAssigned.product || { name: selectedAssigned.productName || "Script", id: selectedAssigned.productId }}
+                method={selectedAssigned.methodObj || METHODS[0]}
+                callType={selectedAssigned.callTypeObj || CALL_TYPES[0]}
+                duration={selectedAssigned.duration || 30}
+                meta={selectedAssigned.meta || {}}
+                script={selectedAssigned.script || selectedAssigned}
+                opts={selectedAssigned.opts || {}}
+                onBack={() => setSelectedAssigned(null)}
+                onChangeSetup={() => setSelectedAssigned(null)}
+                onRegenerate={() => setSelectedAssigned(null)}
+                regenerating={false}
+                readOnly={true}
+              />
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {assignedScripts.map((s, i) => {
+                const method = METHODS.find((m) => m.id === (s.method || s.meta?.method)) || METHODS[0];
+                const callType = CALL_TYPES.find((c) => c.id === (s.callType || s.meta?.callType)) || CALL_TYPES[0];
+                return (
+                  <div key={s.id || i} className="ps-card" style={{ cursor: "pointer", transition: "box-shadow 0.15s" }}
+                    onClick={() => setSelectedAssigned({
+                      ...s,
+                      product: { name: s.productName || s.meta?.productName || s.product?.name || "Script", id: s.productId || s.meta?.productId },
+                      methodObj: method,
+                      callTypeObj: callType,
+                      duration: s.duration || s.meta?.duration || 30,
+                      meta: {
+                        language: LANGUAGES.find((l) => l.id === (s.language || s.meta?.language || "en")),
+                        region: REGIONS.find((r) => r.id === (s.region || s.meta?.region || "india")),
+                        delivery: DELIVERY.find((d) => d.id === (s.delivery || s.meta?.delivery || "balanced")),
+                        simple: s.simple || s.meta?.simple || true,
+                        persona: s.persona || s.meta?.persona || "General audience",
+                      },
+                      script: s.data || s,
+                      opts: s.meta || {},
+                    })}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 15 }}>{s.productName || s.meta?.productName || "Script"}</div>
+                        <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
+                          {method.name} · {callType.name} · {s.duration || s.meta?.duration || 30} min
+                        </div>
+                      </div>
+                      <span className="chip n" style={{ background: "var(--accent)", color: "#fff" }}>View</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
   const personaList = (product.personas || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   const presetPersonaListed = preset && (preset.persona === "General audience" || personaList.includes(preset.persona));
 

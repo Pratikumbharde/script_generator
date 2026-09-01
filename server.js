@@ -702,6 +702,50 @@ addColumnIfNotExists('auto_optimizations', 'script_version', 'TEXT')
 addColumnIfNotExists('auto_optimizations', 'approved_by', 'TEXT')
 addColumnIfNotExists('auto_optimizations', 'measured_uplift', 'TEXT')
 
+// RBAC migration: add role and name columns to users table
+addColumnIfNotExists('users', 'role', "TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','manager','member'))")
+addColumnIfNotExists('users', 'name', 'TEXT')
+
+// RBAC migration: create script_assignments table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS script_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER NOT NULL REFERENCES scripts(id),
+    assigned_by INTEGER NOT NULL REFERENCES users(id),
+    assigned_to INTEGER NOT NULL REFERENCES users(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(script_id, assigned_to)
+  );
+`)
+
+// RBAC migration: create team_invitations table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS team_invitations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+    email TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    token TEXT NOT NULL UNIQUE,
+    invited_by INTEGER NOT NULL REFERENCES users(id),
+    used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`)
+
+// RBAC migration: set role='admin' for users who are workspace owners
+db.prepare(`
+  UPDATE users SET role = 'admin' WHERE id IN (
+    SELECT DISTINCT owner_user_id FROM workspaces
+  ) AND role = 'member'
+`).run()
+
+// RBAC migration: cleanup duplicate workspace_members rows — keep only the latest per (workspace_id, user_id)
+db.exec(`
+  DELETE FROM workspace_members WHERE id NOT IN (
+    SELECT MAX(id) FROM workspace_members GROUP BY workspace_id, user_id
+  )
+`)
+
 /* -- workspace data migration (run after columns exist) -- */
 // create personal workspaces for users without one
 db.prepare(`
@@ -802,6 +846,26 @@ function requirePermission(permission) {
   }
 }
 
+/* ---------- RBAC: canGenerate middleware ---------- */
+function canGenerate(req, res, next) {
+  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+  if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+    return res.status(403).json({ error: 'Only admins and managers can generate scripts' })
+  }
+  next()
+}
+
+/* ---------- RBAC: requireRole middleware ---------- */
+function requireRole(...roles) {
+  return (req, res, next) => {
+    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+    if (!user || !roles.includes(user.role)) {
+      return res.status(403).json({ error: 'Insufficient role' })
+    }
+    next()
+  }
+}
+
 /* ---------- P8.2: audit logging ---------- */
 function auditLog(userId, action, entityType, entityId, details = {}) {
   try {
@@ -864,7 +928,7 @@ async function dispatchWebhook(userId, event, payload) {
 
 /* ---------- auth routes ---------- */
 app.post('/api/auth/register', (req, res) => {
-  const { email, password, company_name } = req.body
+  const { email, password, company_name, name } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
 
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
@@ -872,8 +936,8 @@ app.post('/api/auth/register', (req, res) => {
 
   const password_hash = bcrypt.hashSync(password, 10)
   const userResult = db.prepare(
-    'INSERT INTO users (email, password_hash, company_name) VALUES (?, ?, ?)'
-  ).run(email, password_hash, company_name || '')
+    'INSERT INTO users (email, password_hash, company_name, name, role) VALUES (?, ?, ?, ?, ?)'
+  ).run(email, password_hash, company_name || '', name || '', 'member')
 
   const userId = userResult.lastInsertRowid
 
@@ -882,7 +946,7 @@ app.post('/api/auth/register', (req, res) => {
   db.prepare('INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(wsResult.lastInsertRowid, userId, 'owner')
 
   const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' })
-  res.json({ token, user: { id: userId, email, company_name: company_name || '' } })
+  res.json({ token, user: { id: userId, email, name: name || '', role: 'member', company_name: company_name || '' } })
 })
 
 app.post('/api/auth/login', (req, res) => {
@@ -898,12 +962,12 @@ app.post('/api/auth/login', (req, res) => {
   const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' })
   res.json({
     token,
-    user: { id: user.id, email: user.email, company_name: user.company_name || '' }
+    user: { id: user.id, email: user.email, name: user.name || '', role: user.role || 'member', company_name: user.company_name || '' }
   })
 })
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
-  const user = db.prepare('SELECT id, email, company_name FROM users WHERE id = ?').get(req.userId)
+  const user = db.prepare('SELECT id, email, name, role, company_name FROM users WHERE id = ?').get(req.userId)
   if (!user) return res.status(404).json({ error: 'User not found' })
 
   const workspace = db.prepare(
@@ -915,12 +979,12 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   ).get(req.userId)
 
   const members = workspace ? db.prepare(
-    `SELECT u.email, m.role FROM workspace_members m
+    `SELECT u.id, u.email, u.name, u.role, m.role AS workspace_role FROM workspace_members m
      JOIN users u ON u.id = m.user_id
      WHERE m.workspace_id = ? AND m.joined_at IS NOT NULL`
   ).all(workspace.id) : []
 
-  res.json({ user, workspace: workspace ? { ...workspace, members } : null })
+  res.json({ user: { ...user, role: user.role || 'member', workspace_id: workspace?.id || null }, workspace: workspace ? { ...workspace, members } : null })
 })
 
 /* ---------- settings ---------- */
@@ -1123,6 +1187,45 @@ app.delete('/api/staff/:id', requireAuth, (req, res) => {
 })
 
 /* ---------- scripts ---------- */
+// GET /api/scripts/assigned must come BEFORE /api/scripts/:id to avoid route collision
+app.get('/api/scripts/assigned', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT s.*, sa.assigned_at FROM scripts s
+    JOIN script_assignments sa ON sa.script_id = s.id
+    WHERE sa.assigned_to = ?
+    ORDER BY sa.created_at DESC
+  `).all(req.userId)
+
+  res.json({
+    scripts: rows.map((r) => ({
+      ...r,
+      outcome: r.outcome || 'pending',
+      notes: r.notes || '',
+      used_at: r.used_at || null,
+      data: {
+        opening: r.opening,
+        toneLevel: r.tone_level,
+        toneGuidance: r.tone_guidance,
+        segments: JSON.parse(r.segments_json || '[]'),
+        objections: JSON.parse(r.objections_json || '[]'),
+      },
+      meta: {
+        productId: r.product_id,
+        method: r.method,
+        callType: r.call_type,
+        duration: r.duration,
+        language: r.language,
+        region: r.region,
+        delivery: r.delivery,
+        simple: !!r.simple,
+        persona: r.persona,
+      },
+      canEdit: false,
+      canGenerate: false,
+    }))
+  })
+})
+
 app.get('/api/scripts', requireAuth, (req, res) => {
   const userWs = db.prepare(
     `SELECT w.id FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id WHERE m.user_id = ? AND m.joined_at IS NOT NULL LIMIT 1`
@@ -1163,7 +1266,7 @@ app.get('/api/scripts', requireAuth, (req, res) => {
   })
 })
 
-app.post('/api/scripts', requireAuth, (req, res) => {
+app.post('/api/scripts', requireAuth, canGenerate, (req, res) => {
   const { product_id, method, call_type, duration, language, region, delivery, simple, persona, opening, tone_level, tone_guidance, segments, objections, saved_at, visibility = 'private' } = req.body
 
   const userWs = db.prepare(
@@ -2423,7 +2526,7 @@ app.get('/api/coaching-insights', requireAuth, (req, res) => {
   res.json({ insights: rows })
 })
 
-app.post('/api/coaching-insights/generate', requireAuth, async (req, res) => {
+app.post('/api/coaching-insights/generate', requireAuth, canGenerate, async (req, res) => {
   const { transcript, type = 'roleplay', script_id, call_id } = req.body
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
@@ -2532,7 +2635,7 @@ app.delete('/api/coaching-insights/:id', requireAuth, (req, res) => {
 })
 
 /* ---------- P7.2 sentiment analysis ---------- */
-app.post('/api/sentiment/analyze', requireAuth, async (req, res) => {
+app.post('/api/sentiment/analyze', requireAuth, canGenerate, async (req, res) => {
   const { transcript, type = 'call', call_id } = req.body
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
@@ -3036,7 +3139,7 @@ app.get('/api/competitors/:id/intel', requireAuth, (req, res) => {
   res.json({ intel: rows })
 })
 
-app.post('/api/competitor-intel/analyze', requireAuth, async (req, res) => {
+app.post('/api/competitor-intel/analyze', requireAuth, canGenerate, async (req, res) => {
   const { competitor_name, source_url, raw_content, product_id, competitor_id } = req.body
   if (!competitor_name || !raw_content) return res.status(400).json({ error: 'competitor_name and raw_content required' })
 
@@ -3160,7 +3263,7 @@ app.delete('/api/competitor-intel/:id', requireAuth, (req, res) => {
 })
 
 /* ---------- P9.2 predictive deal scoring ---------- */
-app.post('/api/deal-scores/analyze', requireAuth, async (req, res) => {
+app.post('/api/deal-scores/analyze', requireAuth, canGenerate, async (req, res) => {
   const { transcript, script_id, call_id } = req.body
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
@@ -3313,7 +3416,7 @@ app.put('/api/organization', requireAuth, (req, res) => {
 })
 
 /* ---------- P9.4 script refinement ---------- */
-app.post('/api/script-refinements/generate', requireAuth, async (req, res) => {
+app.post('/api/script-refinements/generate', requireAuth, canGenerate, async (req, res) => {
   const { script_id, segments_json, goal, focus_areas } = req.body
   if (!script_id || !segments_json) return res.status(400).json({ error: 'script_id and segments_json required' })
 
@@ -4293,6 +4396,194 @@ app.get('/api/model-routing/logs', requireAuth, (req, res) => {
     LIMIT 100
   `).all(req.userId)
   res.json({ logs: rows })
+})
+
+/* ---------- RBAC: Team management ---------- */
+
+// GET /api/team — list team members for current workspace
+app.get('/api/team', requireAuth, (req, res) => {
+  const currentUser = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+    return res.status(403).json({ error: 'Only admins and managers can view team members' })
+  }
+
+  const ws = db.prepare(
+    `SELECT w.id FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
+     WHERE m.user_id = ? AND m.joined_at IS NOT NULL LIMIT 1`
+  ).get(req.userId)
+  if (!ws) return res.status(404).json({ error: 'No workspace found' })
+
+  const members = db.prepare(`
+    SELECT u.id, u.email, u.name, u.role, m.role AS workspace_role,
+      (SELECT COUNT(*) FROM script_assignments sa WHERE sa.assigned_to = u.id) AS assigned_scripts_count
+    FROM workspace_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.workspace_id = ? AND m.joined_at IS NOT NULL
+    ORDER BY u.id
+  `).all(ws.id)
+
+  res.json({ members })
+})
+
+// PUT /api/team/:userId/role — change a user's role
+app.put('/api/team/:userId/role', requireAuth, (req, res) => {
+  const { userId } = req.params
+  const { role } = req.body
+
+  if (!['admin', 'manager', 'member'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be admin, manager, or member.' })
+  }
+
+  const currentUser = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+  if (!currentUser || currentUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can change roles' })
+  }
+
+  if (Number(userId) === req.userId && role !== 'admin') {
+    return res.status(400).json({ error: 'Cannot demote yourself from admin' })
+  }
+
+  const targetUser = db.prepare('SELECT id, role FROM users WHERE id = ?').get(userId)
+  if (!targetUser) return res.status(404).json({ error: 'User not found' })
+
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId)
+
+  // Also update workspace_members role to match
+  const ws = db.prepare(
+    `SELECT w.id FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
+     WHERE m.user_id = ? AND m.joined_at IS NOT NULL LIMIT 1`
+  ).get(req.userId)
+  if (ws) {
+    const wmRole = role === 'admin' ? 'owner' : role
+    db.prepare('UPDATE workspace_members SET role = ? WHERE user_id = ? AND workspace_id = ?').run(wmRole, userId, ws.id)
+  }
+
+  const updated = db.prepare('SELECT id, email, name, role FROM users WHERE id = ?').get(userId)
+  res.json({ user: updated })
+})
+
+// POST /api/scripts/:id/assign — assign script to users
+app.post('/api/scripts/:id/assign', requireAuth, (req, res) => {
+  const { id } = req.params
+  const { userIds } = req.body
+
+  if (!Array.isArray(userIds)) {
+    return res.status(400).json({ error: 'userIds must be an array' })
+  }
+
+  const currentUser = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+    return res.status(403).json({ error: 'Only admins and managers can assign scripts' })
+  }
+
+  const script = db.prepare('SELECT id FROM scripts WHERE id = ?').get(id)
+  if (!script) return res.status(404).json({ error: 'Script not found' })
+
+  const insertStmt = db.prepare(
+    'INSERT OR IGNORE INTO script_assignments (script_id, assigned_by, assigned_to) VALUES (?, ?, ?)'
+  )
+
+  let assigned = 0
+  for (const uid of userIds) {
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(uid)
+    if (user) {
+      const result = insertStmt.run(Number(id), req.userId, uid)
+      if (result.changes > 0) assigned++
+    }
+  }
+
+  res.json({ success: true, assigned })
+})
+
+// DELETE /api/scripts/:id/assign/:userId — unassign script from user
+app.delete('/api/scripts/:id/assign/:userId', requireAuth, (req, res) => {
+  const { id, userId } = req.params
+
+  const currentUser = db.prepare('SELECT role FROM users WHERE id = ?').get(req.userId)
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+    return res.status(403).json({ error: 'Only admins and managers can unassign scripts' })
+  }
+
+  const result = db.prepare('DELETE FROM script_assignments WHERE script_id = ? AND assigned_to = ?').run(Number(id), Number(userId))
+  res.json({ success: true, removed: result.changes })
+})
+
+// POST /api/team/invite — invite a team member by email
+app.post('/api/team/invite', requireAuth, (req, res) => {
+  const { email, role = 'member', name } = req.body
+  if (!email) return res.status(400).json({ error: 'Email required' })
+  if (!['manager', 'member'].includes(role)) {
+    return res.status(400).json({ error: 'Role must be manager or member' })
+  }
+
+  const currentUser = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.userId)
+  if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'manager')) {
+    return res.status(403).json({ error: 'Only admins and managers can invite team members' })
+  }
+
+  const ws = db.prepare(
+    `SELECT w.id FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
+     WHERE m.user_id = ? AND m.joined_at IS NOT NULL LIMIT 1`
+  ).get(req.userId)
+  if (!ws) return res.status(404).json({ error: 'No workspace found' })
+
+  const token = require('crypto').randomBytes(32).toString('hex')
+
+  db.prepare(
+    'INSERT INTO team_invitations (workspace_id, email, role, token, invited_by) VALUES (?, ?, ?, ?, ?)'
+  ).run(ws.id, email, role, token, req.userId)
+
+  // If user exists, add them to workspace immediately as well
+  const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
+  if (existingUser) {
+    const wmRole = role === 'admin' ? 'owner' : role
+    db.prepare(
+      'INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+    ).run(ws.id, existingUser.id, wmRole)
+  }
+
+  const inviteUrl = `${req.protocol}://${req.get('host')}/invite/${token}`
+  res.json({ success: true, inviteUrl, token, email, role })
+})
+
+// POST /api/team/invite/accept — accept invitation
+app.post('/api/team/invite/accept', (req, res) => {
+  const { token } = req.body
+  if (!token) return res.status(400).json({ error: 'Token required' })
+
+  const invitation = db.prepare('SELECT * FROM team_invitations WHERE token = ? AND used_at IS NULL').get(token)
+  if (!invitation) return res.status(404).json({ error: 'Invalid or expired invitation' })
+
+  // Check if user exists with this email
+  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(invitation.email)
+
+  if (!user) {
+    // Create a placeholder user account (they'll set password later)
+    const password_hash = bcrypt.hashSync(require('crypto').randomBytes(32).toString('hex'), 10)
+    const name = invitation.email.split('@')[0]
+    const userResult = db.prepare(
+      'INSERT INTO users (email, password_hash, company_name, name, role) VALUES (?, ?, ?, ?, ?)'
+    ).run(invitation.email, password_hash, '', name, invitation.role)
+    user = db.prepare('SELECT * FROM users WHERE id = ?').get(Number(userResult.lastInsertRowid))
+  }
+
+  // Set user role to match invitation
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(invitation.role, user.id)
+
+  // Add user to workspace
+  const wmRole = invitation.role === 'admin' ? 'owner' : invitation.role
+  db.prepare(
+    'INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+  ).run(invitation.workspace_id, user.id, wmRole)
+
+  // Mark invitation as used
+  db.prepare('UPDATE team_invitations SET used_at = CURRENT_TIMESTAMP WHERE id = ?').run(invitation.id)
+
+  const jwtToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' })
+  res.json({
+    token: jwtToken,
+    user: { id: user.id, email: user.email, name: user.name || '', role: user.role || invitation.role, company_name: user.company_name || '' }
+  })
 })
 
 /* ---------- start ---------- */
