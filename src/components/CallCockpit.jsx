@@ -258,7 +258,7 @@ export default function CallCockpit({ product, method, callType, duration, scrip
               >
                 {isListening ? "⏹ Stop" : "🎤 Transcribe"}
               </button>
-              <span style={{ fontSize: 12, color: "#64748B", marginLeft: "auto" }}>
+              <span style={{ fontSize: 12, color: "var(--faint)", marginLeft: "auto" }}>
                 {matchedObjections.length > 0 ? `${matchedObjections.length} match${matchedObjections.length > 1 ? "es" : ""}` : "No objection detected"}
               </span>
             </div>

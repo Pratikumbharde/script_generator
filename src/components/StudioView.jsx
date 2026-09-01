@@ -6,7 +6,7 @@ import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import LimitedInput from "./shared/LimitedInput.jsx";
 import Cockpit from "./ScriptCockpit.jsx";
 
-export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true }) {
+export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true, products = [], onSelectProduct }) {
   // Member read-only mode: show assigned scripts
   const [assignedScripts, setAssignedScripts] = useState([]);
   const [assignedLoading, setAssignedLoading] = useState(false);
@@ -102,6 +102,47 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       </>
     );
   }
+
+  // No product selected — show product picker
+  if (!product) {
+    return (
+      <>
+        <div className="ps-top">
+          <div>
+            <div className="ps-eyebrow">Call Studio</div>
+            <div className="ps-title">Select a Product</div>
+            <div className="ps-sub">Choose a product to generate scripts and start practicing.</div>
+          </div>
+        </div>
+        <div className="ps-body" style={{ maxWidth: 900 }}>
+          {products.length === 0 ? (
+            <div className="ps-empty">
+              <div className="big">No products yet</div>
+              <p>Create a product first, then come back to generate scripts.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {products.map((p) => (
+                <div key={p.id} className="ps-card" style={{ cursor: "pointer", transition: "box-shadow 0.15s" }}
+                  onClick={() => onSelectProduct?.(p)}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</div>
+                      <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
+                        {p.category || "No category"}{p.one_liner ? ` · ${p.one_liner}` : ""}
+                      </div>
+                    </div>
+                    <span className="chip n" style={{ background: "var(--accent)", color: "#fff" }}>Open</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+
   const personaList = (product.personas || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   const presetPersonaListed = preset && (preset.persona === "General audience" || personaList.includes(preset.persona));
 

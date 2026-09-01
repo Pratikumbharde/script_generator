@@ -619,6 +619,27 @@ export async function getWorkspaceUsage(days = 30) {
   return fetchJson(`/usage/workspace?days=${days}`)
 }
 
+/* ---------- Speech-to-Text ---------- */
+export async function transcribeAudio(audioBlob, language = 'en') {
+  const formData = new FormData()
+  const ext = audioBlob.type?.split('/')[1] || 'webm'
+  formData.append('audio', audioBlob, `recording.${ext}`)
+  formData.append('language', language)
+
+  const response = await fetch(`${API_BASE}/stt`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `STT request failed (${response.status})`)
+  }
+
+  return response.json()
+}
+
 /* ---------- P10.1: auto-script optimization ---------- */
 export async function getAutoOptimizationOverview() {
   return fetchJson('/auto-optimizations/overview').then((r) => r.overview)

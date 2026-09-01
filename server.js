@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import nodemailer from 'nodemailer'
+import multer from 'multer'
 
 dotenv.config()
 
@@ -19,6 +20,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const OLLAMA_BASE_URL = process.env.OLLAMA_CLOUD_BASE_URL || 'http://localhost:11434'
 const OLLAMA_API_KEY = process.env.OLLAMA_CLOUD_API_KEY
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.VITE_OLLAMA_MODEL || 'glm-5.2:cloud'
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || ''
+const STT_SERVICE_URL = process.env.STT_SERVICE_URL || 'http://localhost:8001'
+
+/* ---------- Multer for file uploads ---------- */
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
+})
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
@@ -2452,6 +2461,148 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[AI proxy] Stream error:', err.message)
     res.status(500).json({ error: err.message })
+  }
+})
+
+/* ---------- Speech-to-Text (JWT protected) ---------- */
+
+// Helper: call Deepgram API for transcription with diarization
+async function transcribeWithDeepgram(audioBuffer, mimetype, language) {
+  const langMap = { hi: 'hi', mr: 'mr', en: 'en' }
+  const deepgramLang = langMap[language] || 'en'
+
+  const response = await fetch('https://api.deepgram.com/v1/listen?' + new URLSearchParams({
+    model: 'nova-2',
+    language: deepgramLang,
+    diarize: 'true',
+    smart_format: 'true',
+    punctuate: 'true',
+  }), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+      'Content-Type': mimetype || 'audio/webm',
+    },
+    body: audioBuffer,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Deepgram ${response.status}: ${text.slice(0, 200)}`)
+  }
+
+  const data = await response.json()
+  const result = data.results?.channels?.[0]?.alternatives?.[0]
+  if (!result) throw new Error('No transcription result from Deepgram')
+
+  // Build segments from Deepgram's diarized words
+  const words = result.words || []
+  const segments = []
+  let currentSpeaker = null
+  let currentText = ''
+  let segmentStart = 0
+
+  for (const w of words) {
+    if (w.speaker !== currentSpeaker) {
+      if (currentText) {
+        segments.push({
+          speaker: `Speaker ${(currentSpeaker || 0) + 1}`,
+          text: currentText.trim(),
+          start: segmentStart,
+          end: w.start || segmentStart,
+          confidence: result.confidence || 0.9,
+        })
+      }
+      currentSpeaker = w.speaker
+      currentText = w.punctuated_word || w.word
+      segmentStart = w.start || 0
+    } else {
+      currentText += ' ' + (w.punctuated_word || w.word)
+    }
+  }
+  // Push last segment
+  if (currentText) {
+    segments.push({
+      speaker: `Speaker ${(currentSpeaker || 0) + 1}`,
+      text: currentText.trim(),
+      start: segmentStart,
+      end: words.length ? words[words.length - 1].end : 0,
+      confidence: result.confidence || 0.9,
+    })
+  }
+
+  return {
+    text: result.transcript || '',
+    language,
+    confidence: result.confidence || 0.9,
+    diarization: true,
+    segments,
+  }
+}
+
+// Helper: call VEXYL-STT fallback service
+async function transcribeWithVexyl(audioBuffer, mimetype, language) {
+  const formData = new FormData()
+  const blob = new Blob([audioBuffer], { type: mimetype || 'audio/webm' })
+  formData.append('audio', blob, `recording.${mimetype?.split('/')[1] || 'webm'}`)
+  formData.append('language', language)
+
+  const response = await fetch(`${STT_SERVICE_URL}/transcribe`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`VEXYL-STT ${response.status}: ${text.slice(0, 200)}`)
+  }
+
+  return await response.json()
+}
+
+app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio file provided' })
+  }
+
+  const language = req.body.language || 'en'
+  const supported = ['hi', 'mr', 'en']
+  if (!supported.includes(language)) {
+    return res.status(400).json({ error: `Unsupported language '${language}'. Supported: ${supported.join(', ')}` })
+  }
+
+  const audioBuffer = req.file.buffer
+  const mimetype = req.file.mimetype
+
+  // Try 1: Deepgram (if API key configured)
+  if (DEEPGRAM_API_KEY) {
+    try {
+      console.log(`[STT] Using Deepgram for language=${language}`)
+      const result = await transcribeWithDeepgram(audioBuffer, mimetype, language)
+      return res.json(result)
+    } catch (err) {
+      console.warn(`[STT] Deepgram failed: ${err.message}. Falling back to VEXYL-STT.`)
+    }
+  }
+
+  // Try 2: VEXYL-STT fallback
+  try {
+    console.log(`[STT] Using VEXYL-STT for language=${language}`)
+    const result = await transcribeWithVexyl(audioBuffer, mimetype, language)
+    return res.json(result)
+  } catch (err) {
+    console.error(`[STT] VEXYL-STT also failed: ${err.message}`)
+    // If Deepgram was skipped (no key), mention it
+    if (!DEEPGRAM_API_KEY) {
+      return res.status(503).json({
+        error: 'Speech-to-text unavailable. No DEEPGRAM_API_KEY configured and VEXYL-STT service is not reachable.',
+        detail: err.message,
+      })
+    }
+    return res.status(503).json({
+      error: 'All STT services failed. Deepgram errored and VEXYL-STT is unreachable.',
+      detail: err.message,
+    })
   }
 })
 

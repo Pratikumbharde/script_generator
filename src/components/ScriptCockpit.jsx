@@ -7,6 +7,8 @@ import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 import LimitedInput from "./shared/LimitedInput.jsx";
 import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
+import VoiceRecorder from "./shared/VoiceRecorder.jsx";
+import DiarizedTranscript from "./shared/DiarizedTranscript.jsx";
 import CallCockpit from "./CallCockpit.jsx";
 import { createShareLink, updateScript } from "../api/client.js";
 import ScriptComments from "./ScriptComments.jsx";
@@ -39,6 +41,8 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
   const [notes, setNotes] = useState("");
   const [usedAt, setUsedAt] = useState(null);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [transcriptResult, setTranscriptResult] = useState(null);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   // P5.2: share & export
   const [showShare, setShowShare] = useState(false);
@@ -647,7 +651,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>How did this call go?</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "#6B7B93" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
+                  {[{ id: "won", label: "Won", color: "#1A7F5B" }, { id: "lost", label: "Lost", color: "#B23237" }, { id: "no_deal", label: "No deal", color: "var(--muted)" }, { id: "pending", label: "Pending", color: "var(--accent)" }].map((o) => (
                     <button
                       key={o.id}
                       className={`ps-btn ${outcome === o.id ? "pri" : "ghost"}`}
@@ -665,7 +669,15 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
               </button>
             </div>
             <div style={{ marginTop: 12 }}>
-              <label style={{ fontSize: 13, color: "var(--muted)", display: "block", marginBottom: 6 }}>Post-call notes</label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <label style={{ fontSize: 13, color: "var(--muted)" }}>Post-call notes</label>
+                <VoiceRecorder
+                  compact
+                  showLanguagePicker
+                  onTranscript={(result) => { setTranscriptResult(result); setShowTranscript(true); }}
+                  onText={(text) => setNotes(prev => prev ? prev + '\n' + text : text)}
+                />
+              </div>
               <LimitedTextarea
                 className="finp"
                 style={{ minHeight: 60, resize: "vertical", width: "100%" }}
@@ -675,6 +687,13 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                 onBlur={() => saveNotes(notes)}
                 maxLength={5000}
               />
+              {showTranscript && transcriptResult && (
+                <DiarizedTranscript
+                  result={transcriptResult}
+                  onInsert={(text) => setNotes(prev => prev ? prev + '\n' + text : text)}
+                  onClose={() => setShowTranscript(false)}
+                />
+              )}
             </div>
           </div>
 

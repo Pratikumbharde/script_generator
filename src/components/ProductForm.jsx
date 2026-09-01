@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import LimitedInput from "./shared/LimitedInput.jsx";
 import LimitedTextarea from "./shared/LimitedTextarea.jsx";
+import VoiceRecorder from "./shared/VoiceRecorder.jsx";
 import { createProduct, updateProduct } from "../api/client.js";
 import {
   ChevronDown,
@@ -242,6 +243,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
     if (!meta) return null;
     const isTextarea = ["description", "painPoints", "differentiators", "proofPoints", "personas", "features", "commonObjections", "keyMessages"].includes(key);
     const hasAi = ["oneLiner", "description", "idealCustomer", "painPoints", "differentiators", "proofPoints"].includes(key);
+    const hasVoice = ["description", "painPoints", "differentiators"].includes(key);
 
     return (
       <div className="frow" key={key}>
@@ -250,6 +252,14 @@ export default function ProductForm({ product, onCancel, onSaved }) {
           {meta.required && <span className="req">*</span>}
           {meta.recommended && <span className="rec">Recommended</span>}
           {meta.advanced && <span className="adv">Advanced</span>}
+          {hasVoice && (
+            <VoiceRecorder
+              compact
+              showLanguagePicker={false}
+              language="en"
+              onText={(text) => setF(prev => ({ ...prev, [key]: prev[key] ? prev[key] + ' ' + text : text }))}
+            />
+          )}
         </label>
         {isTextarea ? (
           <LimitedTextarea

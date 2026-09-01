@@ -147,14 +147,9 @@ export default function Sidebar({ view, setView, active, company, workspace, use
   }, []);
 
   const navigateTo = useCallback((id) => {
-    if (id === "studio") {
-      if (active) setView("studio");
-      else setView("products");
-    } else {
-      setView(id);
-    }
+    setView(id);
     setMobileOpen(false);
-  }, [setView, active]);
+  }, [setView]);
 
   const isMember = !canGenerate; // canGenerate is true for admin/manager, false for member
 

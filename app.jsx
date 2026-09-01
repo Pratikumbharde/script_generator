@@ -157,8 +157,18 @@ export default function PitchStudio() {
           {view === "add" && (
             <ProductForm product={editingProduct} onCancel={() => { setEditingProduct(null); setView("products"); }} onSaved={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} />
           )}
-          {view === "studio" && active && (
-            <StudioView key={active.id + "-" + studioNonce} product={active} preset={preset} teamLanguages={teamLanguages} staff={staff} onBack={() => setView("products")} canGenerate={canGenerate} />
+          {view === "studio" && (
+            <StudioView
+              key={active ? active.id + "-" + studioNonce : "empty"}
+              product={active}
+              products={products}
+              onSelectProduct={(p) => { setActive(p); setStudioNonce((n) => n + 1); }}
+              preset={preset}
+              teamLanguages={teamLanguages}
+              staff={staff}
+              onBack={() => setView("products")}
+              canGenerate={canGenerate}
+            />
           )}
           {view === "scripts" && (
             <ScriptsView products={products} teamLanguages={teamLanguages}
