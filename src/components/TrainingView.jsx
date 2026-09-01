@@ -30,6 +30,7 @@ export default function TrainingView() {
             <div className="tr-grid">
               {METHODS.map((m) => {
                 const t = METHOD_TRAINING[m.id];
+                if (!t) return null;
                 return (
                   <div key={m.id} className="tr-card" onClick={() => setOpenMethod(m.id)}>
                     <div className="tr-card-top">
@@ -54,6 +55,7 @@ export default function TrainingView() {
             <div className="tr-grid">
               {CALL_TYPES.map((c) => {
                 const t = CALLTYPE_TRAINING[c.id];
+                if (!t) return null;
                 return (
                   <div key={c.id} className="tr-card" onClick={() => setOpenCallType(c.id)}>
                     <div className="tr-card-top">
@@ -222,6 +224,7 @@ function MethodOverviewTable() {
           <tbody>
             {METHODS.slice().sort((a, b) => a.tone.localeCompare(b.tone) || a.name.localeCompare(b.name)).map((m) => {
               const t = METHOD_TRAINING[m.id];
+              if (!t) return null;
               return (
                 <tr key={m.id}>
                   <td><b>{t.emoji} {m.name}</b></td>
