@@ -4605,8 +4605,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', detail: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' ') })
 })
 
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`API server running on http://0.0.0.0:${PORT}`)
   console.log(`Ollama upstream: ${OLLAMA_BASE_URL} (model: ${OLLAMA_MODEL || 'glm-5.2:cloud'})`)
   if (OLLAMA_BASE_URL.includes('localhost') || OLLAMA_BASE_URL.includes('127.0.0.1')) {
     console.log('⚠️  OLLAMA_CLOUD_BASE_URL points to localhost. Make sure Ollama is running locally, or update .env to your cloud endpoint.')
