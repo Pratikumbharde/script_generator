@@ -27,6 +27,10 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 app.use(cors({ origin: ALLOWED_ORIGINS }))
 app.use(express.json())
 
+/* ---------- Serve frontend in production ---------- */
+const DIST_PATH = path.join(__dirname, 'dist')
+app.use(express.static(DIST_PATH))
+
 /* ---------- SQLite database ---------- */
 const db = new Database(path.join(__dirname, 'database.sqlite'))
 
@@ -4584,6 +4588,13 @@ app.post('/api/team/invite/accept', (req, res) => {
     token: jwtToken,
     user: { id: user.id, email: user.email, name: user.name || '', role: user.role || invitation.role, company_name: user.company_name || '' }
   })
+})
+
+/* ---------- SPA fallback — serve index.html for all non-API routes ---------- */
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(DIST_PATH, 'index.html'))
+  }
 })
 
 /* ---------- start ---------- */
