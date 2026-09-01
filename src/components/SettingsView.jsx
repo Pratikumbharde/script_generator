@@ -77,6 +77,7 @@ export default function SettingsView() {
       setTemplates(tpls || []);
       if (p?.theme) {
         document.querySelector(".ps-root")?.setAttribute("data-theme", p.theme);
+        localStorage.setItem("ps_theme", p.theme);
       }
     } catch (e) {
       console.error(e);
@@ -92,6 +93,7 @@ export default function SettingsView() {
       setPrefs(p);
       if (p?.theme) {
         document.querySelector(".ps-root")?.setAttribute("data-theme", p.theme);
+        localStorage.setItem("ps_theme", p.theme);
       }
     } catch (e) {
       console.error(e);

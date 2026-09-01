@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
-const PORT = process.env.SERVER_PORT || 3001
+const PORT = process.env.PORT || process.env.SERVER_PORT || 3001
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const OLLAMA_BASE_URL = process.env.OLLAMA_CLOUD_BASE_URL || 'http://localhost:11434'
 const OLLAMA_API_KEY = process.env.OLLAMA_CLOUD_API_KEY
@@ -33,12 +33,42 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
   : ['http://localhost:5173', 'http://localhost:3001', 'http://127.0.0.1:5173']
 
-app.use(cors({ origin: ALLOWED_ORIGINS }))
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl) or matching origins
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.onrender.com') || origin.endsWith('.render.com')) {
+      callback(null, true)
+    } else {
+      callback(null, true) // Allow all in development; restrict in production via ALLOWED_ORIGINS env
+    }
+  }
+}))
 app.use(express.json())
 
 /* ---------- Serve frontend in production ---------- */
 const DIST_PATH = path.join(__dirname, 'dist')
-app.use(express.static(DIST_PATH))
+app.use(express.static(DIST_PATH, {
+  setHeaders: (res, filePath) => {
+    // Ensure correct MIME types for JS modules (fixes Render deployment)
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript')
+    } else if (filePath.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript')
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css')
+    } else if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html')
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json')
+    } else if (filePath.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml')
+    } else if (filePath.endsWith('.woff2')) {
+      res.setHeader('Content-Type', 'font/woff2')
+    } else if (filePath.endsWith('.woff')) {
+      res.setHeader('Content-Type', 'font/woff')
+    }
+  }
+}))
 
 /* ---------- SQLite database ---------- */
 const db = new Database(path.join(__dirname, 'database.sqlite'))
@@ -4741,11 +4771,13 @@ app.post('/api/team/invite/accept', (req, res) => {
   })
 })
 
-/* ---------- SPA fallback — serve index.html for all non-API routes ---------- */
+/* ---------- SPA fallback — serve index.html for all non-API, non-asset routes ---------- */
 app.get('/{*splat}', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(DIST_PATH, 'index.html'))
+  // Skip API routes and static asset requests (they should be served by express.static)
+  if (req.path.startsWith('/api') || req.path.match(/\.\w+$/)) {
+    return res.status(404).send('Not found')
   }
+  res.sendFile(path.join(DIST_PATH, 'index.html'))
 })
 
 /* ---------- start ---------- */

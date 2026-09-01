@@ -19,6 +19,7 @@ import StudioView from "./src/components/StudioView.jsx";
 import TeamView from "./src/components/TeamView.jsx";
 import Sidebar from "./src/components/Sidebar.jsx";
 import { useAuth } from "./src/context/AuthContext.jsx";
+import { getPreferences } from "./src/api/client.js";
 import { STYLES } from "./src/styles/styles.js";
 import { S } from "./src/utils/helpers.js";
 import { CardSkeleton, SidebarSkeleton } from "./src/components/shared/Skeletons.jsx";
@@ -75,7 +76,17 @@ export default function PitchStudio() {
   // P6.5: Load theme preference
   useEffect(() => {
     const saved = localStorage.getItem('ps_theme');
-    if (saved) document.querySelector('.ps-root')?.setAttribute('data-theme', saved);
+    if (saved) {
+      document.querySelector('.ps-root')?.setAttribute('data-theme', saved);
+    } else {
+      // No local theme yet — try loading from server preferences
+      getPreferences().then(p => {
+        if (p?.theme) {
+          localStorage.setItem('ps_theme', p.theme);
+          document.querySelector('.ps-root')?.setAttribute('data-theme', p.theme);
+        }
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
