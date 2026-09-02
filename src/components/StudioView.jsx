@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { METHODS, CALL_TYPES, CALL_METHODS, DURATIONS, LANGUAGES, REGIONS, DELIVERY, PERSONA_TEMPLATES, TONE_COLOR, methodsFor, durationsFor, durationHintFor } from "../data/constants.js";
 import { S, slug, scriptKey, generateScript, generateScriptStream } from "../utils/helpers.js";
-import { getVoiceContext, getAssignedScripts } from "../api/client.js";
+import { getVoiceDNA, getAssignedScripts, getLearnedPatterns, getPreferences } from "../api/client.js";
 import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import LimitedInput from "./shared/LimitedInput.jsx";
+import VoiceRecorder from "./shared/VoiceRecorder.jsx";
 import Cockpit from "./ScriptCockpit.jsx";
+import { TrendingUp } from "lucide-react";
 
-export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true, products = [], onSelectProduct }) {
+export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true, products = [], onSelectProduct, onAnalyze }) {
   // Member read-only mode: show assigned scripts
   const [assignedScripts, setAssignedScripts] = useState([]);
   const [assignedLoading, setAssignedLoading] = useState(false);
   const [selectedAssigned, setSelectedAssigned] = useState(null);
+  const [usePatterns, setUsePatterns] = useState(true);
 
   useEffect(() => {
     if (canGenerate) return;
@@ -58,6 +61,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
                 onRegenerate={() => setSelectedAssigned(null)}
                 regenerating={false}
                 readOnly={true}
+                onAnalyze={onAnalyze}
               />
             </div>
           ) : (
@@ -177,9 +181,19 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   const [streamText, setStreamText] = useState("");
   const [voiceContext, setVoiceContext] = useState("");
 
-  // fetch company voice context once
+  // fetch Voice DNA profile + check if enabled
   useEffect(() => {
-    getVoiceContext().then((ctx) => setVoiceContext(ctx || "")).catch(() => setVoiceContext(""));
+    Promise.all([
+      getPreferences().catch(() => ({})),
+      getVoiceDNA().catch(() => null),
+    ]).then(([prefs, profile]) => {
+      const enabled = prefs ? prefs.voice_dna_enabled !== 0 : true;
+      if (enabled && profile) {
+        setVoiceContext(profile);
+      } else {
+        setVoiceContext("");
+      }
+    });
   }, []);
 
   const mObj = METHODS.find((m) => m.id === method);
@@ -239,6 +253,28 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   const runGenerate = async () => {
     setLoading(true); setError(""); setGenProgress(null);
     setStreamStage(null); setStreamStatus(""); setStreamText("");
+
+    // Fetch learned patterns if enabled
+    let learnedContext = null;
+    if (usePatterns && canGenerate) {
+      try {
+        const patterns = await getLearnedPatterns();
+        if (patterns?.minimumData) {
+          learnedContext = {
+            sampleSize: patterns.totalScripts,
+            insights: patterns.insights || [],
+            adjustments: (patterns.methodStats?.length > 0 || patterns.callTypeStats?.length > 0) ? {
+              optimalDuration: patterns.methodStats?.[0]?.avgDuration || null,
+              recommendedPersona: null,
+              keyObjections: [],
+            } : null,
+          };
+        }
+      } catch (e) {
+        // Patterns unavailable — generate without them
+      }
+    }
+
     const langs = languagesToGenerate;
     try {
       let primaryData = null;
@@ -247,7 +283,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
         const lname = (LANGUAGES.find((l) => l.id === lid) || {}).name || lid;
         setGenProgress({ current: i + 1, total: langs.length, langName: lname });
         const data = await generateScriptStream(
-          { product, method: mObj, callType: cObj, duration, language: lid, region, delivery, simple, persona: resolvedPersona, voiceContext },
+          { product, method: mObj, callType: cObj, duration, language: lid, region, delivery, simple, persona: resolvedPersona, voiceContext, learnedContext },
           ({ stage, status, text }) => {
             setStreamStage(stage);
             setStreamStatus(status);
@@ -279,7 +315,8 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       onBack={onBack}
       onChangeSetup={() => setScript(null)}
       onRegenerate={runGenerate}
-      regenerating={loading} />;
+      regenerating={loading}
+      onAnalyze={onAnalyze} />;
   }
 
   return (
@@ -371,7 +408,10 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
                   <option value="__custom__">Custom persona…</option>
                 </select>
                 {persona === "__custom__" && (
-                  <LimitedInput className="finp" style={{ marginTop: 8 }} placeholder="Describe the buyer, e.g. 'price-sensitive kirana shop owner'" value={customPersona} onChange={(e) => setCustomPersona(e.target.value)} maxLength={500} />
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <LimitedInput className="finp" style={{ flex: 1 }} placeholder="Describe the buyer, e.g. 'price-sensitive kirana shop owner'" value={customPersona} onChange={(e) => setCustomPersona(e.target.value)} maxLength={500} />
+                    <VoiceRecorder compact showLanguagePicker={false} onText={(text) => setCustomPersona(text)} />
+                  </div>
                 )}
                 {personaList.length === 0 && persona !== "__custom__" && <div className="fhint">Tip: add personas on the product so they show up here automatically.</div>}
               </div>
@@ -478,6 +518,10 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
               ) : (
                 <button className="ps-btn pri" onClick={runGenerate}>Generate script</button>
               )}
+              <label className="si-pattern-toggle" title="Inject insights from your past call outcomes into the generated script">
+                <input type="checkbox" checked={usePatterns} onChange={e => setUsePatterns(e.target.checked)} />
+                <TrendingUp size={14} /> Use learned patterns
+              </label>
             </div>
           </div>
         )}

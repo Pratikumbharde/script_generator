@@ -243,7 +243,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
     if (!meta) return null;
     const isTextarea = ["description", "painPoints", "differentiators", "proofPoints", "personas", "features", "commonObjections", "keyMessages"].includes(key);
     const hasAi = ["oneLiner", "description", "idealCustomer", "painPoints", "differentiators", "proofPoints"].includes(key);
-    const hasVoice = ["description", "painPoints", "differentiators"].includes(key);
+    const hasVoice = ["oneLiner", "description", "idealCustomer", "painPoints", "personas", "differentiators", "competitors", "proofPoints", "features", "commonObjections", "keyMessages"].includes(key);
 
     return (
       <div className="frow" key={key}>
@@ -257,7 +257,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
               compact
               showLanguagePicker={false}
               language="en"
-              onText={(text) => setF(prev => ({ ...prev, [key]: prev[key] ? prev[key] + ' ' + text : text }))}
+              onText={(text) => setF(prev => ({ ...prev, [key]: text }))}
             />
           )}
         </label>

@@ -142,6 +142,13 @@ export async function updateScript(id, updates) {
   return data.script
 }
 
+export async function reorderScripts(items) {
+  return fetchJson('/scripts/reorder', {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+  })
+}
+
 export async function deleteScript(id) {
   return fetchJson(`/scripts/${id}`, { method: 'DELETE' })
 }
@@ -270,6 +277,19 @@ export async function createVoiceDoc(doc) {
 
 export async function deleteVoiceDoc(id) {
   return fetchJson(`/voice-docs/${id}`, { method: 'DELETE' })
+}
+
+/* ---------- Voice DNA ---------- */
+export async function getVoiceDNA() {
+  return fetchJson('/voice-dna').then((r) => r.profile)
+}
+
+export async function analyzeVoiceDNA() {
+  return fetchJson('/voice-dna/analyze', { method: 'POST' }).then((r) => r.profile)
+}
+
+export async function toggleVoiceDNA(enabled) {
+  return fetchJson('/voice-dna/toggle', { method: 'PUT', body: JSON.stringify({ enabled }) })
 }
 
 /* ---------- feedback ---------- */
@@ -638,6 +658,42 @@ export async function transcribeAudio(audioBlob, language = 'en') {
   }
 
   return response.json()
+}
+
+// ─── FALLBACK: Uncomment when implementing AI speaker diarization ───
+// export async function diarizeTranscript(text, language = 'en') {
+//   return fetchJson('/diarize', { method: 'POST', body: JSON.stringify({ text, language }) })
+// }
+// ─── END FALLBACK ───
+
+/* ---------- P5.3: call recording analysis ---------- */
+export async function analyzeCall(data) {
+  return fetchJson('/call-analyses', { method: 'POST', body: JSON.stringify(data) }).then((r) => r)
+}
+
+export async function listCallAnalyses() {
+  return fetchJson('/call-analyses').then((r) => r.analyses)
+}
+
+export async function getCallAnalysis(id) {
+  return fetchJson(`/call-analyses/${id}`).then((r) => r.analysis)
+}
+
+export async function deleteCallAnalysis(id) {
+  return fetchJson(`/call-analyses/${id}`, { method: 'DELETE' })
+}
+
+/* ---------- P5.4: self-improving AI ---------- */
+export async function getLearnedPatterns() {
+  return fetchJson('/learn/patterns')
+}
+
+export async function getImprovementSuggestions(data) {
+  return fetchJson('/learn/suggest', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function refreshPatterns() {
+  return fetchJson('/learn/refresh', { method: 'POST' })
 }
 
 /* ---------- P10.1: auto-script optimization ---------- */

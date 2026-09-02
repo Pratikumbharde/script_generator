@@ -17,7 +17,7 @@ import {
   Play, Pause, RotateCcw, Phone, Mic, ChevronRight,
   MoreHorizontal, Copy, Printer, Share2, FileText,
   CheckCircle2, AlertTriangle, Clock, Volume2, Globe,
-  Sparkles, Pencil, Plus, X, Trash2, Check
+  Sparkles, Pencil, Plus, X, Trash2, Check, AudioWaveform
 } from "lucide-react";
 
 /* ============================================================
@@ -26,7 +26,7 @@ import {
    Call state is explicit. Actions are tiered.
    ============================================================ */
 
-export default function Cockpit({ product, method, callType, duration, meta, script, opts, onBack, onChangeSetup, onRegenerate, regenerating, readOnly }) {
+export default function Cockpit({ product, method, callType, duration, meta, script, opts, onBack, onChangeSetup, onRegenerate, regenerating, readOnly, onAnalyze }) {
   const { user } = useAuth();
   const primaryLang = opts?.language || "en";
   const [callMode, setCallMode] = useState(false);
@@ -671,12 +671,19 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             <div style={{ marginTop: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <label style={{ fontSize: 13, color: "var(--muted)" }}>Post-call notes</label>
-                <VoiceRecorder
-                  compact
-                  showLanguagePicker
-                  onTranscript={(result) => { setTranscriptResult(result); setShowTranscript(true); }}
-                  onText={(text) => setNotes(prev => prev ? prev + '\n' + text : text)}
-                />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {onAnalyze && (
+                    <button className="ps-btn ghost" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => onAnalyze(script)} title="Analyze this call recording against the script">
+                      <AudioWaveform size={14} /> Analyze
+                    </button>
+                  )}
+                  <VoiceRecorder
+                    compact
+                    showLanguagePicker
+                    onTranscript={(result) => { setTranscriptResult(result); setShowTranscript(true); }}
+                    onText={(text) => setNotes(text)}
+                  />
+                </div>
               </div>
               <LimitedTextarea
                 className="finp"

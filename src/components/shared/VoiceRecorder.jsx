@@ -6,14 +6,43 @@ const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'Hindi' },
   { code: 'mr', label: 'Marathi' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'it', label: 'Italian' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ko', label: 'Korean' },
 ]
+
+// Map our language codes to Web Speech API BCP-47 codes
+const WEB_SPEECH_LANG_MAP = {
+  en: 'en-US',
+  hi: 'hi-IN',
+  mr: 'mr-IN',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  de: 'de-DE',
+  pt: 'pt-BR',
+  it: 'it-IT',
+  ja: 'ja-JP',
+  zh: 'zh-CN',
+  ko: 'ko-KR',
+}
 
 /**
  * VoiceRecorder — reusable mic button that records audio and transcribes it.
  *
+ * Two modes:
+ * 1. Web Speech API (browser-native, zero backend) — used when available.
+ *    - If onText callback is provided, streams text LIVE as you speak (dictation mode)
+ *    - If only onTranscript is provided, delivers the complete result on stop
+ * 2. Server-side fallback (Deepgram / VEXYL-STT / AI) — for uploaded files or browsers without Web Speech
+ *
  * Props:
  * - onTranscript(result) — called with { text, confidence, language, diarization, segments }
- * - onText(text) — called with just the flat transcript text (convenience)
+ * - onText(text) — called with incremental text (live dictation into text fields)
  * - language — default language code (default: 'en')
  * - showLanguagePicker — show language dropdown (default: true)
  * - compact — smaller button style (default: false)
@@ -32,26 +61,138 @@ export default function VoiceRecorder({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [duration, setDuration] = useState(0)
+  const [webSpeechSupported, setWebSpeechSupported] = useState(false)
   const mediaRef = useRef(null)
   const recorderRef = useRef(null)
   const chunksRef = useRef([])
   const timerRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const finalTextRef = useRef('') // accumulated final text from Web Speech API
+
+  // Check Web Speech API support
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    setWebSpeechSupported(!!SpeechRecognition)
+  }, [])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       if (mediaRef.current) mediaRef.current.getTracks().forEach(t => t.stop())
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort() } catch {}
+      }
     }
   }, [])
 
-  const startRecording = useCallback(async () => {
+  // ─── Web Speech API (browser-native, zero backend) ───
+  const startWebSpeech = useCallback(async () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return false
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = WEB_SPEECH_LANG_MAP[language] || 'en-US'
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.maxAlternatives = 1
+
+    finalTextRef.current = ''
+
+    recognition.onresult = (event) => {
+      let interimTranscript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalTextRef.current += result[0].transcript + ' '
+        } else {
+          interimTranscript += result[0].transcript
+        }
+      }
+
+      // Live dictation: stream text to onText as you speak
+      const currentText = (finalTextRef.current + interimTranscript).trim()
+      if (onText && currentText) {
+        onText(currentText)
+      }
+    }
+
+    recognition.onerror = (event) => {
+      console.warn('[WebSpeech] Error:', event.error)
+      if (event.error === 'not-allowed') {
+        setError('Microphone permission denied')
+      } else if (event.error === 'no-speech' || event.error === 'aborted') {
+        // Not fatal — may have just been silence
+        return // Don't stop recording for these
+      } else {
+        setError(`Speech recognition error: ${event.error}`)
+      }
+      stopCleanup()
+    }
+
+    recognition.onend = () => {
+      // Recognition ended — deliver final result
+      const text = finalTextRef.current.trim()
+      if (text && onTranscript) {
+        onTranscript({
+          text,
+          confidence: 0.9,
+          language,
+          diarization: false,
+          segments: [{ speaker: 'Speaker 1', text, start: 0, end: 0, confidence: 0.9 }],
+        })
+      }
+      stopCleanup()
+    }
+
+    recognitionRef.current = recognition
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaRef.current = stream
+
+      recognition.start()
+      setRecording(true)
+      setDuration(0)
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
+
+      // Auto-stop after 2 minutes
+      setTimeout(() => {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop()
+        }
+      }, 120000)
+
+      return true
+    } catch (err) {
+      console.warn('[WebSpeech] Failed to start:', err)
+      recognitionRef.current = null
+      return false
+    }
+  }, [language, onTranscript, onText])
+
+  const stopCleanup = useCallback(() => {
+    setRecording(false)
+    setLoading(false)
+    setDuration(0)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (mediaRef.current) {
+      mediaRef.current.getTracks().forEach(t => t.stop())
+      mediaRef.current = null
+    }
+    recognitionRef.current = null
+  }, [])
+
+  // ─── Server-side transcription fallback ───
+  const startServerTranscription = useCallback(async () => {
     setError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaRef.current = stream
 
-      // Prefer webm/opus, fall back to whatever's available
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm')
@@ -68,12 +209,10 @@ export default function VoiceRecorder({
       }
 
       recorder.onstop = async () => {
-        // Stop timer
         if (timerRef.current) {
           clearInterval(timerRef.current)
           timerRef.current = null
         }
-        // Stop mic tracks
         stream.getTracks().forEach(t => t.stop())
         mediaRef.current = null
 
@@ -92,14 +231,16 @@ export default function VoiceRecorder({
           onTranscript?.(result)
           onText?.(result.text || '')
         } catch (err) {
-          setError(err.message || 'Transcription failed')
+          setError(err.message || 'Transcription failed. Try using "Record Live" in Call Analysis for browser-based transcription.')
         } finally {
           setLoading(false)
           setDuration(0)
+          setRecording(false)
+          recorderRef.current = null
         }
       }
 
-      recorder.start(1000) // collect data every second
+      recorder.start(1000)
       setRecording(true)
       setDuration(0)
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
@@ -121,8 +262,28 @@ export default function VoiceRecorder({
     }
   }, [language, onTranscript, onText])
 
+  const startRecording = useCallback(async () => {
+    setError('')
+    finalTextRef.current = ''
+
+    // Prefer Web Speech API (works without backend, streams live text)
+    if (webSpeechSupported) {
+      const started = await startWebSpeech()
+      if (started) return
+    }
+
+    // Fallback to server-side transcription
+    await startServerTranscription()
+  }, [webSpeechSupported, startWebSpeech, startServerTranscription])
+
   const stopRecording = useCallback(() => {
-    if (recorderRef.current?.state === 'recording') {
+    if (recognitionRef.current) {
+      // Web Speech API — stop recognition (onend handler delivers final result)
+      recognitionRef.current.stop()
+      // Cleanup happens in onend/onerror handlers
+      setRecording(false)
+      setLoading(true) // Show "transcribing" while onend processes
+    } else if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop()
       setRecording(false)
     }
@@ -170,6 +331,7 @@ export default function VoiceRecorder({
         )}
 
         {loading && <span className="vr-status">Transcribing…</span>}
+        {recording && <span className="vr-status">Listening…</span>}
       </div>
 
       {error && <div className="vr-error">{error}</div>}

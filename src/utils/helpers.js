@@ -255,13 +255,38 @@ export async function callModelStream(system, prompt, onChunk) {
   return fullText;
 }
 
+export function formatVoiceDNA(profile) {
+  if (!profile) return "";
+  // If it's a plain string (legacy raw text), use it directly but cap it
+  if (typeof profile === "string") {
+    return profile.trim()
+      ? `\nCOMPANY VOICE CONTEXT (match this tone, vocabulary, and phrasing):\n${profile.slice(0, 3000)}\n`
+      : "";
+  }
+  // Structured Voice DNA profile — format it for the prompt
+  const lines = ["\nCOMPANY VOICE DNA:"];
+  if (profile.tone) lines.push(`- Tone: ${profile.tone}`);
+  if (profile.formality) lines.push(`- Formality: ${profile.formality}`);
+  if (profile.communication_style) lines.push(`- Communication style: ${profile.communication_style}`);
+  if (profile.sentence_style) lines.push(`- Sentence style: ${profile.sentence_style}`);
+  if (profile.preferred_vocabulary) lines.push(`- Preferred vocabulary: ${profile.preferred_vocabulary}`);
+  if (profile.avoid_vocabulary) lines.push(`- Avoid vocabulary: ${profile.avoid_vocabulary}`);
+  if (profile.messaging_patterns) lines.push(`- Messaging patterns: ${profile.messaging_patterns}`);
+  if (profile.brand_terminology) lines.push(`- Brand terminology: ${profile.brand_terminology}`);
+  if (profile.guidelines) lines.push(`- Guidelines: ${profile.guidelines}`);
+  lines.push("Follow this company voice naturally. Do not copy source material verbatim.\n");
+  return lines.length > 2 ? lines.join("\n") : "";
+}
+
 export async function generateScriptStream(opts, onProgress) {
-  const { product, method, callType, duration, voiceContext } = opts;
+  const { product, method, callType, duration, voiceContext, learnedContext } = opts;
   const segHint = duration <= 15 ? "3-4" : duration <= 30 ? "4-5" : "5-6";
   const style = styleBlock(opts);
 
-  const voiceLine = voiceContext
-    ? `\nCOMPANY VOICE CONTEXT (match this tone, vocabulary, and phrasing):\n${voiceContext.slice(0, 3000)}\n`
+  const voiceLine = formatVoiceDNA(voiceContext);
+
+  const learnedLine = learnedContext
+    ? `\nLEARNED PATTERNS (based on ${learnedContext.sampleSize || ''} real calls):\n${learnedContext.insights?.map(i => `- ${i}`).join('\n') || ''}\n${learnedContext.adjustments ? `Optimal duration: ${learnedContext.adjustments.optimalDuration || 'N/A'} min. Recommended persona: ${learnedContext.adjustments.recommendedPersona || 'N/A'}. Key objections: ${learnedContext.adjustments.keyObjections?.join(', ') || 'N/A'}.` : ''}\nApply these patterns to make the script more effective.\n`
     : "";
 
   const corePrompt = `Write the core of a live call script for a sales rep.
@@ -275,7 +300,7 @@ Total length: ${duration} minutes
 
 ${style}${voiceLine}
 
-The opening, questions, and flow must genuinely reflect how a ${method.name} practitioner runs a ${callType.name.toLowerCase()} call for this buyer. Use the real product details — no placeholders. Keep spoken lines short and easy to say.
+The opening, questions, and flow must genuinely reflect how a ${method.name} practitioner runs a ${callType.name.toLowerCase()} call for this buyer. Use the real product details — no placeholders. Keep spoken lines short and easy to say.${learnedLine}
 
 Return ONLY minified JSON of this exact shape (all text in the chosen language, except "do" notes which may stay short):
 {"opening":"exact first line, word for word","toneLevel":"Consultative|Assertive|Aggressive|Methodical","toneGuidance":"1-2 sentences on when to push vs pull","segments":[{"label":"short phase name","start":0,"end":5,"goal":"one-sentence objective (coaching, not spoken)","say":["exact words to speak"],"ask":["exact question to speak"],"do":["silent coaching note — what to listen for or do"]}]}
@@ -394,12 +419,14 @@ export function styleBlock({ language, region, delivery, simple, persona, person
 }
 
 export async function generateScript(opts) {
-  const { product, method, callType, duration, voiceContext } = opts;
+  const { product, method, callType, duration, voiceContext, learnedContext } = opts;
   const segHint = duration <= 15 ? "3-4" : duration <= 30 ? "4-5" : "5-6";
   const style = styleBlock(opts);
 
-  const voiceLine = voiceContext
-    ? `\nCOMPANY VOICE CONTEXT (match this tone, vocabulary, and phrasing):\n${voiceContext.slice(0, 3000)}\n`
+  const voiceLine = formatVoiceDNA(voiceContext);
+
+  const learnedLine = learnedContext
+    ? `\nLEARNED PATTERNS (based on ${learnedContext.sampleSize || ''} real calls):\n${learnedContext.insights?.map(i => `- ${i}`).join('\n') || ''}\n${learnedContext.adjustments ? `Optimal duration: ${learnedContext.adjustments.optimalDuration || 'N/A'} min. Recommended persona: ${learnedContext.adjustments.recommendedPersona || 'N/A'}. Key objections: ${learnedContext.adjustments.keyObjections?.join(', ') || 'N/A'}.` : ''}\nApply these patterns to make the script more effective.\n`
     : "";
 
   const corePrompt = `Write the core of a live call script for a sales rep.
@@ -413,7 +440,7 @@ Total length: ${duration} minutes
 
 ${style}${voiceLine}
 
-The opening, questions, and flow must genuinely reflect how a ${method.name} practitioner runs a ${callType.name.toLowerCase()} call for this buyer. Use the real product details — no placeholders. Keep spoken lines short and easy to say.
+The opening, questions, and flow must genuinely reflect how a ${method.name} practitioner runs a ${callType.name.toLowerCase()} call for this buyer. Use the real product details — no placeholders. Keep spoken lines short and easy to say.${learnedLine}
 
 Return ONLY minified JSON of this exact shape (all text in the chosen language, except "do" notes which may stay short):
 {"opening":"exact first line, word for word","toneLevel":"Consultative|Assertive|Aggressive|Methodical","toneGuidance":"1-2 sentences on when to push vs pull","segments":[{"label":"short phase name","start":0,"end":5,"goal":"one-sentence objective (coaching, not spoken)","say":["exact words to speak"],"ask":["exact question to speak"],"do":["silent coaching note — what to listen for or do"]}]}

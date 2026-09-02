@@ -4,7 +4,8 @@ import {
   BarChart3, Users, Eye, Star, LayoutTemplate, PenTool, Mic,
   Trophy, CalendarDays, Lock, Settings, Download,
   Activity, Zap, TrendingUp,
-  ChevronRight, PanelLeftClose, PanelLeft, LogOut, HelpCircle, Briefcase, Menu
+  ChevronRight, PanelLeftClose, PanelLeft, LogOut, HelpCircle, Briefcase, Menu,
+  AudioWaveform
 } from "lucide-react";
 
 /* ============================================================
@@ -42,6 +43,7 @@ const NAV_GROUPS = [
       { id: "competitor", label: "Competitors" },
       { id: "dealscore", label: "Deal Scores" },
       { id: "heatmap", label: "Conversation Intelligence" },
+      { id: "analysis", label: "Call Analysis" },
     ],
   },
   {
@@ -50,6 +52,7 @@ const NAV_GROUPS = [
     items: [
       { id: "refinement", label: "Script Refinement" },
       { id: "auto_opt", label: "AI Optimization" },
+      { id: "selfimprove", label: "Self-Improvement" },
       { id: "abtesting", label: "A/B Tests" },
       { id: "voice", label: "Voice DNA" },
     ],
@@ -90,6 +93,8 @@ const ICON_MAP = {
   competitor: Eye,
   dealscore: Star,
   heatmap: Activity,
+  analysis: AudioWaveform,
+  selfimprove: TrendingUp,
   refinement: PenTool,
   auto_opt: TrendingUp,
   abtesting: Boxes,

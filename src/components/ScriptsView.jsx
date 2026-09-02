@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { S, nameOf, parseScriptKey, scriptKey, generateScript } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES, REGIONS, DELIVERY } from "../data/constants.js";
-import { Search, List, LayoutGrid, SlidersHorizontal, Columns, MoreHorizontal, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, FileText, Copy, Trash2, Sparkles, Globe, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
+import { reorderScripts, updateScript } from "../api/client.js";
+import { Search, List, LayoutGrid, SlidersHorizontal, Columns, MoreHorizontal, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, FileText, Copy, Trash2, Sparkles, Globe, ChevronLeft, ChevronRight, Inbox, GripVertical } from "lucide-react";
 import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 
 /* ============================================================
@@ -18,6 +19,7 @@ const COLUMNS_DEF = [
   { key: "language", label: "Language", default: true, sortable: true, width: 100 },
   { key: "region", label: "Region", default: false, sortable: true, width: 100 },
   { key: "delivery", label: "Style", default: false, sortable: true, width: 110 },
+  { key: "campaign", label: "Campaign", default: false, sortable: true, width: 130 },
   { key: "outcome", label: "Outcome", default: true, sortable: true, width: 100 },
   { key: "updated", label: "Last updated", default: true, sortable: true, width: 110 },
 ];
@@ -62,6 +64,7 @@ function useUrlState() {
       method: p.get("method") || "all",
       language: p.get("language") || "all",
       outcome: p.get("outcome") || "all",
+      campaign: p.get("campaign") || "all",
       dateFrom: p.get("dateFrom") || "",
       dateTo: p.get("dateTo") || "",
       q: p.get("q") || "",
@@ -95,6 +98,8 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const [syncErr, setSyncErr] = useState("");
   const [confirmSync, setConfirmSync] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [dragOverKey, setDragOverKey] = useState(null);
+  const [editingCampaign, setEditingCampaign] = useState(null);
   const [showCols, setShowCols] = useState(false);
   const [visibleCols, setVisibleCols] = useState(() => {
     try {
@@ -120,7 +125,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
       const rec = await S.get(k);
       if (!rec || !rec.data) continue;
       const meta = rec.meta || parseScriptKey(k);
-      out.push({ key: k, savedAt: rec.savedAt || 0, meta, outcome: rec.outcome || "pending" });
+      out.push({ key: k, savedAt: rec.savedAt || 0, meta, outcome: rec.outcome || "pending", sort_order: rec.sort_order || 0, campaign: rec.campaign || null });
     }
     out.sort((a, b) => b.savedAt - a.savedAt);
     setRows(out);
@@ -204,11 +209,16 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
       if (filters.method !== "all" && m.method !== filters.method) return false;
       if (filters.language !== "all" && m.language !== filters.language) return false;
       if (filters.outcome !== "all" && (r.outcome || "pending") !== filters.outcome) return false;
+      if (filters.campaign !== "all") {
+        const rowCampaign = (r.campaign || "").trim();
+        if (filters.campaign === "__none__") { if (rowCampaign) return false; }
+        else { if (rowCampaign !== filters.campaign) return false; }
+      }
       if (kpiFilter && (r.outcome || "pending") !== kpiFilter) return false;
       if (filters.dateFrom && r.savedAt < new Date(filters.dateFrom).getTime()) return false;
       if (filters.dateTo && r.savedAt > new Date(filters.dateTo).getTime() + 86400000) return false;
       if (filters.q) {
-        const hay = (productName(m) + " " + (m.persona || "") + " " + nameOf(METHODS, m.method) + " " + nameOf(CALL_TYPES, m.callType) + " " + nameOf(LANGUAGES, m.language)).toLowerCase();
+        const hay = (productName(m) + " " + (m.persona || "") + " " + (r.campaign || "") + " " + nameOf(METHODS, m.method) + " " + nameOf(CALL_TYPES, m.callType) + " " + nameOf(LANGUAGES, m.language)).toLowerCase();
         if (!hay.includes(filters.q.toLowerCase())) return false;
       }
       return true;
@@ -216,6 +226,13 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     /* Sorting */
     const [sortKey, sortDir] = filters.sort?.split("_") || ["updated", "desc"];
     out.sort((a, b) => {
+      /* Priority sort: sort_order > 0 first, then by savedAt */
+      if (sortKey === "priority") {
+        const aP = (a.sort_order || 0) > 0 ? a.sort_order : 999999;
+        const bP = (b.sort_order || 0) > 0 ? b.sort_order : 999999;
+        if (aP !== bP) return sortDir === "asc" ? aP - bP : bP - aP;
+        return sortDir === "asc" ? a.savedAt - b.savedAt : b.savedAt - a.savedAt;
+      }
       let av, bv;
       switch (sortKey) {
         case "method": av = nameOf(METHODS, a.meta.method); bv = nameOf(METHODS, b.meta.method); break;
@@ -224,6 +241,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         case "language": av = nameOf(LANGUAGES, a.meta.language); bv = nameOf(LANGUAGES, b.meta.language); break;
         case "region": av = nameOf(REGIONS, a.meta.region); bv = nameOf(REGIONS, b.meta.region); break;
         case "delivery": av = nameOf(DELIVERY, a.meta.delivery); bv = nameOf(DELIVERY, b.meta.delivery); break;
+        case "campaign": av = (a.campaign || "").toLowerCase(); bv = (b.campaign || "").toLowerCase(); break;
         case "outcome": av = a.outcome || "pending"; bv = b.outcome || "pending"; break;
         case "updated": default: av = a.savedAt; bv = b.savedAt; break;
       }
@@ -285,6 +303,57 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     return k === key ? d : null;
   };
 
+  /* Drag-and-drop reorder */
+  const isPrioritySort = filters.sort === "priority_asc" || filters.sort === "priority_desc" || filters.sort?.startsWith("priority");
+  const handleDragStart = (e, key) => {
+    e.dataTransfer.setData("text/plain", key);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragOver = (e, key) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverKey !== key) setDragOverKey(key);
+  };
+  const handleDragLeave = () => { setDragOverKey(null); };
+  const handleDrop = async (e, targetKey) => {
+    e.preventDefault();
+    const dragKey = e.dataTransfer.getData("text/plain");
+    setDragOverKey(null);
+    if (dragKey === targetKey || !rows) return;
+    const dragIdx = rows.findIndex((r) => r.key === dragKey);
+    const targetIdx = rows.findIndex((r) => r.key === targetKey);
+    if (dragIdx === -1 || targetIdx === -1) return;
+    // Reorder rows array
+    const newRows = [...rows];
+    const [moved] = newRows.splice(dragIdx, 1);
+    newRows.splice(targetIdx, 0, moved);
+    // Assign sort_order values
+    const items = newRows.map((r, i) => ({ id: r.meta?.scriptId || r.meta?.id, sort_order: i + 1 }));
+    setRows(newRows);
+    try {
+      await reorderScripts(items.filter((it) => it.id));
+    } catch { /* optimistic, will reload */ }
+  };
+
+  /* Campaign list for filter */
+  const campaignList = useMemo(() => {
+    if (!rows) return [];
+    const campaigns = new Set(rows.map((r) => (r.campaign || "").trim()).filter(Boolean));
+    return [...campaigns].sort();
+  }, [rows]);
+
+  const saveCampaign = async (scriptId, value) => {
+    setEditingCampaign(null);
+    try {
+      await updateScript(scriptId, { campaign: value || null });
+      // Update local state
+      setRows((prev) => prev ? prev.map((r) => {
+        if ((r.meta?.scriptId || r.meta?.id) === scriptId || r.key === scriptId) return { ...r, campaign: value || null };
+        return r;
+      }) : prev);
+    } catch { /* silent */ }
+  };
+
   /* Date preset handler */
   const applyDatePreset = (id) => {
     const { from, to } = getDatePresetRange(id);
@@ -297,7 +366,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     })?.id || "custom";
   }, [filters.dateFrom, filters.dateTo]);
 
-  const activeFilterCount = [filters.product, filters.method, filters.language, filters.outcome, filters.dateFrom, filters.dateTo].filter((v) => v && v !== "all").length + (kpiFilter ? 1 : 0);
+  const activeFilterCount = [filters.product, filters.method, filters.language, filters.outcome, filters.campaign, filters.dateFrom, filters.dateTo].filter((v) => v && v !== "all").length + (kpiFilter ? 1 : 0);
 
   /* Render helpers */
   const renderKPI = () => {
@@ -351,15 +420,26 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     const missing = prodExists ? missingLangsFor(m) : [];
     const updated = r.savedAt > 0 ? new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
     const outcomeMeta = OUTCOMES.find((o) => o.id === (r.outcome || "pending")) || OUTCOMES[3];
+    const scriptId = r.meta?.scriptId || r.meta?.id;
+    const isEditingCampaign = editingCampaign === r.key;
+    const isDragOver = dragOverKey === r.key;
     return (
       <tr
         key={r.key}
-        className={isSel ? "sel" : ""}
+        className={`${isSel ? "sel" : ""} ${isDragOver ? "dt-drag-over" : ""}`}
         onClick={() => { if (prodExists) onOpen(r); }}
         style={{ cursor: prodExists ? "pointer" : "default" }}
+        draggable={isPrioritySort}
+        onDragStart={isPrioritySort ? (e) => handleDragStart(e, r.key) : undefined}
+        onDragOver={isPrioritySort ? (e) => handleDragOver(e, r.key) : undefined}
+        onDragLeave={isPrioritySort ? handleDragLeave : undefined}
+        onDrop={isPrioritySort ? (e) => handleDrop(e, r.key) : undefined}
       >
-        <td style={{ paddingLeft: 14 }} onClick={(e) => e.stopPropagation()}>
-          <span className={`ck ${isSel ? "on" : ""}`} onClick={() => toggleSel(r.key)}>{isSel ? "✓" : ""}</span>
+        <td style={{ paddingLeft: isPrioritySort ? 6 : 14 }} onClick={(e) => e.stopPropagation()}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {isPrioritySort && <GripVertical size={14} className="dt-drag-handle" style={{ cursor: "grab", color: "var(--faint)", flexShrink: 0 }} />}
+            <span className={`ck ${isSel ? "on" : ""}`} onClick={() => toggleSel(r.key)}>{isSel ? "✓" : ""}</span>
+          </span>
         </td>
         {visibleCols.has("script") && (
           <td>
@@ -376,6 +456,33 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         {visibleCols.has("language") && <td>{nameOf(LANGUAGES, m.language)}</td>}
         {visibleCols.has("region") && <td>{nameOf(REGIONS, m.region)}</td>}
         {visibleCols.has("delivery") && <td><span className="dt-pill">{nameOf(DELIVERY, m.delivery)}{m.simple ? " · simple" : ""}</span></td>}
+        {visibleCols.has("campaign") && (
+          <td onClick={(e) => e.stopPropagation()}>
+            {isEditingCampaign ? (
+              <input
+                className="finp dt-campaign-input"
+                autoFocus
+                value={r.campaign || ""}
+                placeholder="Campaign name"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRows((prev) => prev ? prev.map((row) => row.key === r.key ? { ...row, campaign: val } : row) : prev);
+                }}
+                onBlur={() => saveCampaign(scriptId, r.campaign || "")}
+                onKeyDown={(e) => { if (e.key === "Enter") saveCampaign(scriptId, r.campaign || ""); if (e.key === "Escape") setEditingCampaign(null); }}
+                style={{ fontSize: 12, padding: "2px 6px", width: 120 }}
+              />
+            ) : (
+              <span
+                className={`dt-campaign-tag ${(r.campaign || "").trim() ? "" : "empty"}`}
+                onClick={() => setEditingCampaign(r.key)}
+                title="Click to set campaign"
+              >
+                {(r.campaign || "").trim() || "—"}
+              </span>
+            )}
+          </td>
+        )}
         {visibleCols.has("outcome") && <td><span className={`ds-status ${outcomeMeta.color}`}><span className="ds-status-dot" />{outcomeMeta.label}</span></td>}
         {visibleCols.has("updated") && <td style={{ color: "var(--muted)", fontSize: 12 }}>{updated}</td>}
         <td onClick={(e) => e.stopPropagation()}>
@@ -435,7 +542,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
               <h3>No scripts match your filters</h3>
               <p>Try removing a filter or changing your search.</p>
               <div className="actions">
-                <button className="ds-btn-sec" onClick={() => { setFilters({ product:"all", method:"all", language:"all", outcome:"all", dateFrom:"", dateTo:"", q:"", view:filters.view, sort:filters.sort }); setKpiFilter(null); }}>
+                <button className="ds-btn-sec" onClick={() => { setFilters({ product:"all", method:"all", language:"all", outcome:"all", campaign:"all", dateFrom:"", dateTo:"", q:"", view:filters.view, sort:filters.sort }); setKpiFilter(null); }}>
                   <X size={14} /> Clear all filters
                 </button>
               </div>
@@ -467,6 +574,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
               {m.persona && m.persona.toLowerCase() !== "general audience" && m.persona !== "general" && <span> · {m.persona}</span>}
               {missing.length > 0 && <span style={{ color: "var(--amber)", fontWeight: 600 }}> · missing {missing.length}</span>}
             </div>
+            {(r.campaign || "").trim() && <div className="ln" style={{ fontSize: 12, marginTop: 2 }}><span className="dt-campaign-tag">{r.campaign}</span></div>}
             <div className="foot" style={{ flexWrap: "wrap", gap: 6 }}>
               {prodExists ? (
                 <>
@@ -491,7 +599,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
           <h3>No scripts match your filters</h3>
           <p>Try removing a filter or changing your search.</p>
           <div className="actions">
-            <button className="ds-btn-sec" onClick={() => { setFilters({ product:"all", method:"all", language:"all", outcome:"all", dateFrom:"", dateTo:"", q:"", view:filters.view, sort:filters.sort }); setKpiFilter(null); }}>
+            <button className="ds-btn-sec" onClick={() => { setFilters({ product:"all", method:"all", language:"all", outcome:"all", campaign:"all", dateFrom:"", dateTo:"", q:"", view:filters.view, sort:filters.sort }); setKpiFilter(null); }}>
               <X size={14} /> Clear all filters
             </button>
           </div>
@@ -594,6 +702,11 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                   </div>
                 )}
               </div>
+              {filters.view === "list" && (
+                <button className={`dt-filter-btn ${isPrioritySort ? "on" : ""}`} onClick={() => setFilters({ ...filters, sort: isPrioritySort ? "updated_desc" : "priority_asc" })} title="Sort by manual priority order (drag to reorder)">
+                  <GripVertical size={14} /> {isPrioritySort ? "Priority order" : "Sort by priority"}
+                </button>
+              )}
               <div className="dt-view-toggle">
                 <button className={filters.view === "list" ? "on" : ""} onClick={() => setFilters({ ...filters, view: "list" })}>
                   <List size={14} /> List
@@ -635,6 +748,14 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                     {OUTCOMES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
                   </select>
                 </div>
+                <div className="dt-filter-group">
+                  <label>Campaign</label>
+                  <select className="fsel" value={filters.campaign || "all"} onChange={(e) => setFilters({ ...filters, campaign: e.target.value })}>
+                    <option value="all">All campaigns</option>
+                    <option value="__none__">No campaign</option>
+                    {campaignList.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
                 <div className="dt-filter-group" style={{ gridColumn: "1 / -1" }}>
                   <label>Date range</label>
                   <div className="dt-date-presets">
@@ -651,7 +772,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                   </div>
                 </div>
                 <div className="dt-filter-actions">
-                  <button className="ps-btn ghost sm" onClick={() => { setFilters({ ...filters, product: "all", method: "all", language: "all", outcome: "all", dateFrom: "", dateTo: "" }); setKpiFilter(null); }}>
+                  <button className="ps-btn ghost sm" onClick={() => { setFilters({ ...filters, product: "all", method: "all", language: "all", outcome: "all", campaign: "all", dateFrom: "", dateTo: "" }); setKpiFilter(null); }}>
                     <X size={14} /> Clear filters
                   </button>
                   <button className="ps-btn pri sm" onClick={() => setShowFilters(false)}>Done</button>
@@ -714,6 +835,12 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                     <button onClick={() => setFilters({ ...filters, outcome: "all" })}><X size={12} /></button>
                   </span>
                 )}
+                {filters.campaign && filters.campaign !== "all" && (
+                  <span className="dt-chip-removable">
+                    {filters.campaign === "__none__" ? "No campaign" : filters.campaign}
+                    <button onClick={() => setFilters({ ...filters, campaign: "all" })}><X size={12} /></button>
+                  </span>
+                )}
                 {kpiFilter && (
                   <span className="dt-chip-removable">
                     {OUTCOMES.find((o) => o.id === kpiFilter)?.label}
@@ -726,7 +853,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                     <button onClick={() => setFilters({ ...filters, dateFrom: "", dateTo: "" })}><X size={12} /></button>
                   </span>
                 )}
-                <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setFilters({ ...filters, product: "all", method: "all", language: "all", outcome: "all", dateFrom: "", dateTo: "" }); setKpiFilter(null); }}>Clear all</button>
+                <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setFilters({ ...filters, product: "all", method: "all", language: "all", outcome: "all", campaign: "all", dateFrom: "", dateTo: "" }); setKpiFilter(null); }}>Clear all</button>
               </div>
             )}
 

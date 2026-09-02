@@ -221,10 +221,29 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('pitch_deck','email','call_recording','brand_guide','competitor_battlecard','other')),
+    type TEXT NOT NULL CHECK(type IN ('pitch_deck','email','call_recording','call_transcript','brand_guide','competitor_battlecard','other')),
     content TEXT NOT NULL,
     tags TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Voice DNA profiles (AI-extracted company voice)
+  CREATE TABLE IF NOT EXISTS voice_dna_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    tone TEXT,
+    formality TEXT,
+    communication_style TEXT,
+    sentence_style TEXT,
+    preferred_vocabulary TEXT,
+    avoid_vocabulary TEXT,
+    messaging_patterns TEXT,
+    brand_terminology TEXT,
+    guidelines TEXT,
+    raw_profile TEXT,
+    source_doc_ids TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
   -- P3.5 migration: self-improving AI feedback
@@ -323,6 +342,7 @@ db.exec(`
     email_call_reminders INTEGER DEFAULT 1,
     email_script_alerts INTEGER DEFAULT 1,
     theme TEXT DEFAULT 'light' CHECK(theme IN ('light','dark','system')),
+    voice_dna_enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -672,6 +692,49 @@ db.exec(`
     error_message TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- P5.3: call recording analysis
+  CREATE TABLE IF NOT EXISTS call_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    script_id TEXT,
+    product_id TEXT,
+    transcript TEXT NOT NULL,
+    segments_json TEXT,
+    overall_score INTEGER CHECK(overall_score BETWEEN 1 AND 100),
+    adherence_score INTEGER CHECK(adherence_score BETWEEN 1 AND 100),
+    discovery_score INTEGER CHECK(discovery_score BETWEEN 1 AND 100),
+    objection_score INTEGER CHECK(objection_score BETWEEN 1 AND 100),
+    closing_score INTEGER CHECK(closing_score BETWEEN 1 AND 100),
+    rapport_score INTEGER CHECK(rapport_score BETWEEN 1 AND 100),
+    adherence_breakdown TEXT,
+    missed_opportunities TEXT,
+    objection_handling TEXT,
+    strengths TEXT,
+    improvements TEXT,
+    coaching_tips TEXT,
+    action_items TEXT,
+    summary TEXT,
+    raw_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- P5.4: self-improving AI pattern cache
+  CREATE TABLE IF NOT EXISTS learn_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    method TEXT,
+    call_type TEXT,
+    wins INTEGER DEFAULT 0,
+    losses INTEGER DEFAULT 0,
+    win_rate REAL DEFAULT 0,
+    insights_json TEXT,
+    top_objections_json TEXT,
+    losing_patterns_json TEXT,
+    optimal_duration INTEGER,
+    recommended_persona TEXT,
+    computed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `)
 
 /* ---------- migrations (ALTER TABLE ADD COLUMN IF NOT EXISTS not supported) ---------- */
@@ -734,6 +797,13 @@ addColumnIfNotExists('user_preferences', 'smtp_user', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_pass', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_from', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_secure', 'INTEGER DEFAULT 0')
+
+// Voice DNA: toggle setting
+addColumnIfNotExists('user_preferences', 'voice_dna_enabled', 'INTEGER DEFAULT 1')
+
+// Script ordering & campaigns
+addColumnIfNotExists('scripts', 'sort_order', 'INTEGER DEFAULT 0')
+addColumnIfNotExists('scripts', 'campaign', 'TEXT')
 
 // P12.1: auto-optimization enhancements (impact scores, evidence, versioning)
 addColumnIfNotExists('auto_optimizations', 'impact_level', "TEXT DEFAULT 'medium' CHECK(impact_level IN ('high','medium','low'))")
@@ -1279,7 +1349,7 @@ app.get('/api/scripts', requireAuth, (req, res) => {
     `SELECT * FROM scripts
      WHERE user_id = ?
         OR (workspace_id = ? AND visibility = 'workspace')
-     ORDER BY saved_at DESC`
+     ORDER BY CASE WHEN sort_order > 0 THEN 0 ELSE 1 END, sort_order ASC, saved_at DESC`
   ).all(req.userId, wsId || 0)
   res.json({
     scripts: rows.map((r) => ({
@@ -1357,9 +1427,27 @@ app.post('/api/scripts', requireAuth, canGenerate, (req, res) => {
   })
 })
 
+app.put('/api/scripts/reorder', requireAuth, (req, res) => {
+  const { items } = req.body
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'items array is required' })
+  }
+  const stmt = db.prepare('UPDATE scripts SET sort_order = ? WHERE id = ? AND user_id = ?')
+  let updated = 0
+  db.transaction(() => {
+    for (const item of items) {
+      if (item.id != null && item.sort_order != null) {
+        const result = stmt.run(item.sort_order, item.id, req.userId)
+        updated += result.changes
+      }
+    }
+  })()
+  res.json({ ok: true, updated })
+})
+
 app.put('/api/scripts/:id', requireAuth, (req, res) => {
   const { id } = req.params
-  const { outcome, notes, used_at, opening, tone_level, tone_guidance, segments, objections } = req.body
+  const { outcome, notes, used_at, opening, tone_level, tone_guidance, segments, objections, campaign, sort_order } = req.body
   const existing = db.prepare('SELECT * FROM scripts WHERE id = ?').get(id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
 
@@ -1381,6 +1469,8 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
   if (tone_guidance !== undefined) { updates.push('tone_guidance = ?'); values.push(tone_guidance) }
   if (segments !== undefined) { updates.push('segments_json = ?'); values.push(JSON.stringify(segments)) }
   if (objections !== undefined) { updates.push('objections_json = ?'); values.push(JSON.stringify(objections)) }
+  if (campaign !== undefined) { updates.push('campaign = ?'); values.push(campaign) }
+  if (sort_order !== undefined) { updates.push('sort_order = ?'); values.push(sort_order) }
   if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' })
 
   values.push(id)
@@ -1504,6 +1594,154 @@ app.delete('/api/voice-docs/:id', requireAuth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' })
   db.prepare('DELETE FROM voice_docs WHERE id = ?').run(id)
   res.json({ success: true })
+})
+
+/* ---------- Voice DNA (JWT protected) ---------- */
+
+// GET /api/voice-dna — return user's current profile (or null)
+app.get('/api/voice-dna', requireAuth, (req, res) => {
+  const profile = db.prepare('SELECT * FROM voice_dna_profiles WHERE user_id = ?').get(req.userId)
+  if (!profile) return res.json({ profile: null })
+  // Don't send raw_profile to frontend — parse it
+  const { raw_profile, source_doc_ids, ...fields } = profile
+  res.json({ profile: fields })
+})
+
+// POST /api/voice-dna/analyze — analyze all voice_docs and generate profile
+app.post('/api/voice-dna/analyze', requireAuth, canGenerate, async (req, res) => {
+  // Fetch all voice docs
+  const docs = db.prepare('SELECT id, name, type, content FROM voice_docs WHERE user_id = ? ORDER BY created_at DESC').all(req.userId)
+  if (!docs.length) {
+    return res.status(400).json({ error: 'Add at least one document before analyzing Voice DNA.' })
+  }
+
+  const allContent = docs.map(d => `[${d.type}: "${d.name}"]\n${d.content}`).join('\n\n---\n\n')
+  const docIds = docs.map(d => d.id)
+
+  const headers = { 'Content-Type': 'application/json' }
+  if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
+
+  const systemPrompt = `You are a brand voice analyst. Given company materials (pitch decks, emails, brand guides, call transcripts, etc.), extract a structured voice profile. Return ONLY valid JSON with these exact fields:
+
+{
+  "tone": "1-2 sentence description of the overall tone",
+  "formality": "1-2 sentence description of formality level",
+  "communication_style": "1-2 sentence description of how the company communicates",
+  "sentence_style": "1-2 sentence description of sentence structure and length preferences",
+  "preferred_vocabulary": "comma-separated list of words/phrases the company uses frequently",
+  "avoid_vocabulary": "comma-separated list of words/phrases the company avoids",
+  "messaging_patterns": "1-2 sentence description of recurring messaging patterns (e.g., opens with questions, closes with CTAs)",
+  "brand_terminology": "comma-separated list of product names, feature names, and branded terms",
+  "guidelines": "3-5 bullet-point style guidelines for writing in this voice"
+}
+
+Analyze the materials below. Synthesize patterns — do NOT copy content verbatim. Be specific and actionable.`
+
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL || 'glm-5.2:cloud',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: allContent.slice(0, 8000) },
+        ],
+        stream: false,
+      }),
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    }
+
+    let data = await response.json()
+    if (data.choices && data.choices[0]?.message?.content) {
+      data = { message: { content: data.choices[0].message.content } }
+    }
+
+    const generated = data.message?.content || ''
+    let parsed = {}
+    try {
+      const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
+      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+    } catch (_) {
+      parsed = { raw: generated }
+    }
+
+    // Upsert into voice_dna_profiles
+    const existing = db.prepare('SELECT id FROM voice_dna_profiles WHERE user_id = ?').get(req.userId)
+    const fields = {
+      tone: parsed.tone || null,
+      formality: parsed.formality || null,
+      communication_style: parsed.communication_style || null,
+      sentence_style: parsed.sentence_style || null,
+      preferred_vocabulary: parsed.preferred_vocabulary || null,
+      avoid_vocabulary: parsed.avoid_vocabulary || null,
+      messaging_patterns: parsed.messaging_patterns || null,
+      brand_terminology: parsed.brand_terminology || null,
+      guidelines: parsed.guidelines || null,
+      raw_profile: JSON.stringify(parsed),
+      source_doc_ids: JSON.stringify(docIds),
+      updated_at: Date.now(),
+    }
+
+    if (existing) {
+      db.prepare(`UPDATE voice_dna_profiles SET
+        tone = ?, formality = ?, communication_style = ?, sentence_style = ?,
+        preferred_vocabulary = ?, avoid_vocabulary = ?, messaging_patterns = ?,
+        brand_terminology = ?, guidelines = ?, raw_profile = ?, source_doc_ids = ?,
+        updated_at = ? WHERE user_id = ?`).run(
+        fields.tone, fields.formality, fields.communication_style, fields.sentence_style,
+        fields.preferred_vocabulary, fields.avoid_vocabulary, fields.messaging_patterns,
+        fields.brand_terminology, fields.guidelines, fields.raw_profile, fields.source_doc_ids,
+        fields.updated_at, req.userId
+      )
+    } else {
+      db.prepare(`INSERT INTO voice_dna_profiles
+        (user_id, tone, formality, communication_style, sentence_style, preferred_vocabulary, avoid_vocabulary, messaging_patterns, brand_terminology, guidelines, raw_profile, source_doc_ids, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        req.userId, fields.tone, fields.formality, fields.communication_style, fields.sentence_style,
+        fields.preferred_vocabulary, fields.avoid_vocabulary, fields.messaging_patterns,
+        fields.brand_terminology, fields.guidelines, fields.raw_profile, fields.source_doc_ids,
+        fields.updated_at
+      )
+    }
+
+    // Also ensure voice_dna_enabled is ON after first analysis
+    const prefs = db.prepare('SELECT voice_dna_enabled FROM user_preferences WHERE user_id = ?').get(req.userId)
+    if (prefs && prefs.voice_dna_enabled === 0) {
+      // Don't auto-enable — respect the user's choice
+    } else if (!prefs || prefs.voice_dna_enabled === null) {
+      addColumnIfNotExists('user_preferences', 'voice_dna_enabled', 'INTEGER DEFAULT 1')
+      db.prepare('UPDATE user_preferences SET voice_dna_enabled = 1 WHERE user_id = ?').run(req.userId)
+    }
+
+    const profile = db.prepare('SELECT * FROM voice_dna_profiles WHERE user_id = ?').get(req.userId)
+    const { raw_profile: _, source_doc_ids: __, ...profileFields } = profile
+    res.json({ profile: profileFields })
+  } catch (err) {
+    console.error('[Voice DNA] Analysis error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/voice-dna/toggle — enable/disable Voice DNA in script generation
+app.put('/api/voice-dna/toggle', requireAuth, (req, res) => {
+  const { enabled } = req.body
+  if (enabled === undefined) return res.status(400).json({ error: 'enabled (boolean) required' })
+  const value = enabled ? 1 : 0
+
+  const existing = db.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(req.userId)
+  if (!existing) {
+    db.prepare('INSERT INTO user_preferences (user_id, voice_dna_enabled) VALUES (?, ?)').run(req.userId, value)
+  } else {
+    db.prepare('UPDATE user_preferences SET voice_dna_enabled = ? WHERE user_id = ?').run(value, req.userId)
+  }
+
+  const prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.userId)
+  res.json({ voice_dna_enabled: prefs.voice_dna_enabled === 1 })
 })
 
 /* ---------- prompt feedback (JWT protected) ---------- */
@@ -2570,25 +2808,165 @@ async function transcribeWithDeepgram(audioBuffer, mimetype, language) {
   }
 }
 
-// Helper: call VEXYL-STT fallback service
-async function transcribeWithVexyl(audioBuffer, mimetype, language) {
-  const formData = new FormData()
-  const blob = new Blob([audioBuffer], { type: mimetype || 'audio/webm' })
-  formData.append('audio', blob, `recording.${mimetype?.split('/')[1] || 'webm'}`)
-  formData.append('language', language)
-
-  const response = await fetch(`${STT_SERVICE_URL}/transcribe`, {
-    method: 'POST',
-    body: formData,
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`VEXYL-STT ${response.status}: ${text.slice(0, 200)}`)
-  }
-
-  return await response.json()
-}
+// ─── FALLBACK STT: VEXYL-STT + AI Diarization (commented out for now) ───
+// When we implement fallback, uncomment this block and the /api/stt fallback section below.
+//
+// // Helper: call VEXYL-STT fallback service
+// async function transcribeWithVexyl(audioBuffer, mimetype, language) {
+//   const langMap = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR', it: 'it-IT', ja: 'ja-JP', zh: 'zh-CN', ko: 'ko-KR' }
+//   const languageCode = langMap[language] || 'en-IN'
+//   const ext = mimetype?.split('/')[1] || 'webm'
+//   const filename = `recording.${ext === 'mpeg' ? 'mp3' : ext}`
+//
+//   const formData = new FormData()
+//   const blob = new Blob([audioBuffer], { type: mimetype || 'audio/webm' })
+//   formData.append('file', blob, filename)
+//   formData.append('language_code', languageCode)
+//
+//   const submitHeaders = {}
+//   if (process.env.VEXYL_STT_API_KEY) {
+//     submitHeaders['X-API-Key'] = process.env.VEXYL_STT_API_KEY
+//   }
+//
+//   const submitResponse = await fetch(`${STT_SERVICE_URL}/batch/transcribe`, {
+//     method: 'POST',
+//     headers: submitHeaders,
+//     body: formData,
+//   })
+//
+//   if (!submitResponse.ok) {
+//     const text = await submitResponse.text().catch(() => '')
+//     throw new Error(`VEXYL-STT submit failed ${submitResponse.status}: ${text.slice(0, 200)}`)
+//   }
+//
+//   const job = await submitResponse.json()
+//   const jobId = job.job_id
+//   if (!jobId) {
+//     throw new Error('VEXYL-STT did not return a job_id')
+//   }
+//
+//   // Poll for result (max 120 seconds)
+//   const maxAttempts = 60
+//   const pollInterval = 2000
+//   for (let i = 0; i < maxAttempts; i++) {
+//     await new Promise(resolve => setTimeout(resolve, pollInterval))
+//     const resultResponse = await fetch(`${STT_SERVICE_URL}/batch/result/${jobId}`, { headers: submitHeaders })
+//     if (!resultResponse.ok) {
+//       const text = await resultResponse.text().catch(() => '')
+//       throw new Error(`VEXYL-STT result fetch failed ${resultResponse.status}: ${text.slice(0, 200)}`)
+//     }
+//     const result = await resultResponse.json()
+//     if (result.status === 'completed' && result.transcript) {
+//       const transcript = typeof result.transcript === 'string' ? result.transcript : result.transcript.text || JSON.stringify(result.transcript)
+//       return {
+//         text: transcript,
+//         confidence: result.confidence || 0.85,
+//         language,
+//         diarization: false,
+//         segments: [{ speaker: 'Speaker 1', text: transcript, start: 0, end: result.audio_duration || 0, confidence: result.confidence || 0.85 }],
+//       }
+//     }
+//     if (result.status === 'failed') {
+//       throw new Error(`VEXYL-STT transcription failed: ${result.error_message || 'Unknown error'}`)
+//     }
+//   }
+//   throw new Error('VEXYL-STT transcription timed out after 120 seconds')
+// }
+//
+// // Helper: use AI model to diarize plain text (separate Sales Rep vs Customer)
+// // Used after VEXYL-STT or Web Speech API returns plain text without speaker labels
+// async function diarizeWithAI(plainText, language) {
+//   const langName = { en: 'English', hi: 'Hindi', mr: 'Marathi', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', it: 'Italian', ja: 'Japanese', zh: 'Chinese', ko: 'Korean' }[language] || 'English'
+//   const headers = { 'Content-Type': 'application/json' }
+//   if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
+//
+//   const systemPrompt = `You are a conversation analyst specializing in sales calls. Given a transcript of a sales call WITHOUT speaker labels, identify who is speaking each part and label them.
+//
+// Rules:
+// - Label the sales representative's turns as "Sales Rep:" — they ask questions, present products, handle objections, push for closing
+// - Label the customer/prospect's turns as "Customer:" — they describe their situation, ask about the product, raise concerns, give answers
+// - Greetings, questions about needs, product pitches, objection handling = Sales Rep
+// - Responses about their situation, objections, budget concerns, hesitations = Customer
+// - If uncertain, questions/pitches default to Sales Rep, answers/concerns default to Customer
+// - Preserve the original wording exactly — do NOT paraphrase or summarize
+// - Split the text into natural conversation turns (each speaker change gets a new line)
+//
+// Return ONLY valid JSON:
+// {
+//   "text": "the full transcript with Sales Rep:/Customer: labels on each line",
+//   "confidence": 0.8,
+//   "language": "${language}",
+//   "diarization": true,
+//   "segments": [
+//     {"speaker": "Sales Rep", "text": "...", "start": 0, "end": 0, "confidence": 0.8},
+//     {"speaker": "Customer", "text": "...", "start": 0, "end": 0, "confidence": 0.8}
+//   ]
+// }`
+//
+//   try {
+//     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+//       method: 'POST',
+//       headers,
+//       body: JSON.stringify({
+//         model: OLLAMA_MODEL || 'glm-5.2:cloud',
+//         messages: [
+//           { role: 'system', content: systemPrompt },
+//           { role: 'user', content: `Here is the transcript without speaker labels:\n\n${plainText}` },
+//         ],
+//         stream: false,
+//       }),
+//     })
+//
+//     if (!response.ok) { console.warn(`[Diarize] AI call failed: ${response.status}`); return null }
+//     const data = await response.json()
+//     const content = data.message?.content || data.choices?.[0]?.message?.content || ''
+//
+//     try {
+//       const clean = content.replace(/```json/gi, '').replace(/```/g, '').trim()
+//       const jsonStart = clean.indexOf('{')
+//       if (jsonStart === -1) throw new Error('No JSON found')
+//       const parsed = JSON.parse(clean.slice(jsonStart))
+//
+//       if (parsed.segments && Array.isArray(parsed.segments) && parsed.segments.length > 0) {
+//         const hasLabels = parsed.segments.some(s =>
+//           (s.speaker || '').toLowerCase().includes('sales') || (s.speaker || '').toLowerCase().includes('customer') || (s.speaker || '').toLowerCase().includes('rep') || (s.speaker || '').toLowerCase().includes('prospect')
+//         )
+//         if (hasLabels) {
+//           console.log(`[Diarize] Successfully identified ${parsed.segments.length} speaker turns`)
+//           const segments = parsed.segments.map(s => ({
+//             speaker: (s.speaker || '').toLowerCase().includes('sales') || (s.speaker || '').toLowerCase() === 'rep' ? 'Sales Rep' : (s.speaker || '').toLowerCase().includes('customer') || (s.speaker || '').toLowerCase().includes('prospect') || (s.speaker || '').toLowerCase().includes('client') ? 'Customer' : 'Sales Rep',
+//             text: s.text || '', start: s.start || 0, end: s.end || 0, confidence: s.confidence || 0.8,
+//           }))
+//           const labeledText = parsed.text && parsed.text.includes(':') ? parsed.text : segments.map(s => `${s.speaker}: ${s.text}`).join('\n')
+//           return { text: labeledText, confidence: parsed.confidence || 0.8, language, diarization: true, segments }
+//         }
+//       }
+//
+//       if (parsed.text && parsed.text.includes(':')) {
+//         const lines = parsed.text.split('\n').filter(l => l.trim())
+//         const segments = lines.map(line => {
+//           const match = line.match(/^(Sales Rep|Customer|Caller|Prospect|Client|Rep)[\s]*:(.+)/i)
+//           if (match) return { speaker: match[1].toLowerCase().includes('sales') || match[1].toLowerCase() === 'rep' || match[1].toLowerCase() === 'caller' ? 'Sales Rep' : 'Customer', text: match[2].trim(), start: 0, end: 0, confidence: 0.8 }
+//           return { speaker: 'Sales Rep', text: line.trim(), start: 0, end: 0, confidence: 0.7 }
+//         })
+//         if (segments.length > 0) { console.log(`[Diarize] Parsed ${segments.length} segments from labeled text (JSON)`); return { text: parsed.text, confidence: 0.8, language, diarization: true, segments } }
+//       }
+//       console.warn('[Diarize] AI JSON response lacked proper speaker labels'); return null
+//     } catch {
+//       if (content.includes('Sales Rep:') || content.includes('Customer:') || content.includes('Rep:') || content.includes('Caller:')) {
+//         const lines = content.split('\n').filter(l => l.trim())
+//         const segments = lines.map(line => {
+//           const match = line.match(/^(Sales Rep|Customer|Caller|Prospect|Client|Rep)[\s]*:(.+)/i)
+//           if (match) return { speaker: match[1].toLowerCase().includes('sales') || match[1].toLowerCase() === 'rep' || match[1].toLowerCase() === 'caller' ? 'Sales Rep' : 'Customer', text: match[2].trim(), start: 0, end: 0, confidence: 0.8 }
+//           return null
+//         }).filter(Boolean)
+//         if (segments.length > 0) { console.log(`[Diarize] Parsed ${segments.length} segments from plain text`); return { text: content.trim(), confidence: 0.8, language, diarization: true, segments } }
+//       }
+//       console.warn('[Diarize] Could not parse AI response into speaker turns'); return null
+//     }
+//   } catch (err) { console.warn(`[Diarize] Failed: ${err.message}`); return null }
+// }
+// ─── END FALLBACK STT ───
 
 app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
   if (!req.file) {
@@ -2601,40 +2979,69 @@ app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
     return res.status(400).json({ error: `Unsupported language '${language}'. Supported: ${supported.join(', ')}` })
   }
 
+  if (!DEEPGRAM_API_KEY) {
+    return res.status(503).json({
+      error: 'File transcription requires a Deepgram API key. Use "Record Live" (browser speech recognition) or "Type Call Details" instead — no API key needed.',
+    })
+  }
+
   const audioBuffer = req.file.buffer
   const mimetype = req.file.mimetype
 
-  // Try 1: Deepgram (if API key configured)
-  if (DEEPGRAM_API_KEY) {
-    try {
-      console.log(`[STT] Using Deepgram for language=${language}`)
-      const result = await transcribeWithDeepgram(audioBuffer, mimetype, language)
-      return res.json(result)
-    } catch (err) {
-      console.warn(`[STT] Deepgram failed: ${err.message}. Falling back to VEXYL-STT.`)
-    }
-  }
-
-  // Try 2: VEXYL-STT fallback
   try {
-    console.log(`[STT] Using VEXYL-STT for language=${language}`)
-    const result = await transcribeWithVexyl(audioBuffer, mimetype, language)
+    console.log(`[STT] Using Deepgram for language=${language}`)
+    const result = await transcribeWithDeepgram(audioBuffer, mimetype, language)
     return res.json(result)
   } catch (err) {
-    console.error(`[STT] VEXYL-STT also failed: ${err.message}`)
-    // If Deepgram was skipped (no key), mention it
-    if (!DEEPGRAM_API_KEY) {
-      return res.status(503).json({
-        error: 'Speech-to-text unavailable. No DEEPGRAM_API_KEY configured and VEXYL-STT service is not reachable.',
-        detail: err.message,
-      })
-    }
-    return res.status(503).json({
-      error: 'All STT services failed. Deepgram errored and VEXYL-STT is unreachable.',
+    console.error(`[STT] Deepgram failed: ${err.message}`)
+    return res.status(502).json({
+      error: 'Deepgram transcription failed.',
       detail: err.message,
     })
   }
+
+  // ─── FALLBACK: Uncomment when implementing VEXYL-STT + AI diarization ───
+  // // Try 2: VEXYL-STT fallback
+  // try {
+  //   console.log(`[STT] Using VEXYL-STT for language=${language}`)
+  //   const result = await transcribeWithVexyl(audioBuffer, mimetype, language)
+  //   if (result && result.text && !result.diarization) {
+  //     console.log('[STT] VEXYL-STT returned plain text, running AI diarization...')
+  //     const diarized = await diarizeWithAI(result.text, language)
+  //     if (diarized) return res.json({ ...result, ...diarized })
+  //     console.warn('[STT] AI diarization failed, returning plain transcript')
+  //   }
+  //   return res.json(result)
+  // } catch (err) {
+  //   console.warn(`[STT] VEXYL-STT failed: ${err.message}`)
+  // }
+  // return res.status(503).json({
+  //   error: 'Transcription failed. Deepgram is not configured and VEXYL-STT is unavailable.',
+  //   hint: 'Add DEEPGRAM_API_KEY to .env, or start the VEXYL-STT service.',
+  // })
+  // ─── END FALLBACK ───
 })
+
+// ─── FALLBACK: Uncomment when implementing AI speaker diarization ───
+// // Endpoint: diarize plain text (add speaker labels using AI)
+// // Frontend can send Web Speech API transcript here for speaker identification
+// app.post('/api/diarize', requireAuth, async (req, res) => {
+//   const { text, language } = req.body
+//   if (!text || typeof text !== 'string' || text.trim().length < 10) {
+//     return res.status(400).json({ error: 'Text is required (min 10 characters)' })
+//   }
+//   const lang = language || 'en'
+//   console.log(`[Diarize] Processing ${text.length} chars in ${lang}`)
+//   try {
+//     const result = await diarizeWithAI(text.trim(), lang)
+//     if (result) return res.json(result)
+//     return res.json({ text: text.trim(), confidence: 0.3, language: lang, diarization: false, segments: [{ speaker: 'Speaker 1', text: text.trim(), start: 0, end: 0, confidence: 0.3 }] })
+//   } catch (err) {
+//     console.error(`[Diarize] Error: ${err.message}`)
+//     return res.status(500).json({ error: 'Speaker identification failed', detail: err.message })
+//   }
+// })
+// ─── END FALLBACK ───
 
 /* ---------- analytics (JWT protected) ---------- */
 app.get('/api/analytics/overview', requireAuth, (req, res) => {
@@ -2817,6 +3224,427 @@ app.delete('/api/coaching-insights/:id', requireAuth, (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Not found' })
   db.prepare('DELETE FROM coaching_insights WHERE id = ?').run(id)
   res.json({ success: true })
+})
+
+/* ---------- P5.3: call recording analysis ---------- */
+app.get('/api/call-analyses', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM call_analyses WHERE user_id = ? ORDER BY created_at DESC').all(req.userId)
+  res.json({ analyses: rows })
+})
+
+app.get('/api/call-analyses/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT * FROM call_analyses WHERE id = ? AND user_id = ?').get(req.params.id, req.userId)
+  if (!row) return res.status(404).json({ error: 'Not found' })
+  res.json({ analysis: row })
+})
+
+app.post('/api/call-analyses', requireAuth, canGenerate, async (req, res) => {
+  const { transcript, segments, script_id, product_id } = req.body
+  if (!transcript) return res.status(400).json({ error: 'transcript required' })
+
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
+
+    // Build context from script + product if provided
+    let scriptContext = ''
+    let productContext = ''
+
+    if (script_id) {
+      const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(script_id, req.userId)
+      if (script) {
+        const segs = typeof script.segments_json === 'string'
+          ? (() => { try { return JSON.parse(script.segments_json) } catch { return [] } })()
+          : (script.segments_json || [])
+        const objs = typeof script.objections_json === 'string'
+          ? (() => { try { return JSON.parse(script.objections_json) } catch { return [] } })()
+          : (script.objections_json || [])
+        scriptContext = `\n\nThe sales rep was supposed to follow this script:\nMethod: ${script.method || 'N/A'}\nCall Type: ${script.call_type || 'N/A'}\nDuration: ${script.duration || 'N/A'} min\n\nScript Segments:\n${(Array.isArray(segs) ? segs : []).map((s, i) => `Segment ${i + 1} (${s.start || '?'}-${s.end || '?'} min): ${s.label || s.title || 'Untitled'}\n  Say: ${s.say || s.content || ''}\n  Ask: ${s.ask || ''}\n  Goal: ${s.goal || ''}`).join('\n')}\n\nPlanned Objection Responses:\n${(Array.isArray(objs) ? objs : []).map((o, i) => `${i + 1}. Objection: "${o.objection || o.question || ''}" → Response: "${o.response || o.answer || ''}"`).join('\n')}`
+      }
+    }
+
+    if (product_id) {
+      const product = db.prepare('SELECT * FROM products WHERE id = ? AND user_id = ?').get(product_id, req.userId)
+      if (product) {
+        productContext = `\n\nProduct being sold: ${product.name}\nCategory: ${product.category || 'N/A'}\nOne-liner: ${product.one_liner || 'N/A'}\nDescription: ${product.description || 'N/A'}\nIdeal Customer: ${product.ideal_customer || 'N/A'}\nPain Points: ${product.pain_points || 'N/A'}\nDifferentiators: ${product.differentiators || 'N/A'}`
+      }
+    }
+
+    const systemPrompt = `You are an elite sales call analyst. Analyze the following sales call and return ONLY valid JSON with this exact structure:
+{
+  "overall_score": number 1-100,
+  "adherence_score": number 1-100 (how well the rep followed the script${scriptContext ? ' — compare against the script segments provided' : ''}),
+  "discovery_score": number 1-100 (quality of needs discovery and questioning),
+  "objection_score": number 1-100 (how well objections were handled),
+  "closing_score": number 1-100 (effectiveness of closing techniques),
+  "rapport_score": number 1-100 (building rapport and relationship),
+  "adherence_breakdown": [
+    { "segment": "segment name", "covered": true/false, "notes": "brief note about what was covered or missed" }
+  ],
+  "missed_opportunities": [
+    { "moment": "approximate timestamp or context", "context": "what happened", "missed": "what was missed", "suggestion": "what to say instead" }
+  ],
+  "objection_handling": [
+    { "objection": "the objection raised", "response": "how the rep handled it", "score": number 1-100, "better": "suggested better approach" }
+  ],
+  "strengths": ["brief strength 1", "brief strength 2"],
+  "improvements": ["brief improvement 1", "brief improvement 2"],
+  "coaching_tips": ["actionable coaching tip 1", "actionable coaching tip 2"],
+  "action_items": ["specific thing to practice or do 1", "specific thing to practice or do 2"],
+  "summary": "2-3 sentence personalized coaching summary"
+}
+
+IMPORTANT - The input may be in one of these formats:
+1. A diarized transcript with speaker labels like "Sales Rep:" or "Customer:" — use these to understand who said what.
+2. A narrative description like "I said... then the customer said..." — interpret this as a conversational flow. Treat first-person ("I", "we") as the sales rep and references to the buyer ("customer", "client", "prospect", "they") as the other party.
+3. A raw transcript without labels — infer the conversational turns based on context, questions, and answers.
+
+Always separate what the sales rep said from what the prospect/customer said. Analyze both sides fairly.
+
+Be specific and actionable. Include 3-5 adherence_breakdown items${scriptContext ? ' based on the script segments' : ' based on standard sales call structure'}. Include 2-4 missed_opportunities. Include 2-4 objection_handling items if objections came up. Make all suggestions realistic and specific to what was actually said.`
+
+    const userContent = `TRANSCRIPT:\n${transcript}\n${scriptContext}\n${productContext}`
+
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL || 'glm-5.2:cloud',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        stream: false,
+      }),
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    }
+
+    let data = await response.json()
+    if (data.choices && data.choices[0]?.message?.content) {
+      data = { message: { content: data.choices[0].message.content } }
+    }
+
+    const generated = data.message?.content || ''
+    let parsed = {}
+    try {
+      const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
+      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+    } catch (_) {
+      parsed = { raw: generated }
+    }
+
+    const result = db.prepare(`
+      INSERT INTO call_analyses
+      (user_id, script_id, product_id, transcript, segments_json, overall_score, adherence_score, discovery_score, objection_score, closing_score, rapport_score, adherence_breakdown, missed_opportunities, objection_handling, strengths, improvements, coaching_tips, action_items, summary, raw_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      req.userId,
+      script_id || null,
+      product_id || null,
+      transcript,
+      segments ? JSON.stringify(segments) : null,
+      parsed.overall_score || null,
+      parsed.adherence_score || null,
+      parsed.discovery_score || null,
+      parsed.objection_score || null,
+      parsed.closing_score || null,
+      parsed.rapport_score || null,
+      Array.isArray(parsed.adherence_breakdown) ? JSON.stringify(parsed.adherence_breakdown) : null,
+      Array.isArray(parsed.missed_opportunities) ? JSON.stringify(parsed.missed_opportunities) : null,
+      Array.isArray(parsed.objection_handling) ? JSON.stringify(parsed.objection_handling) : null,
+      Array.isArray(parsed.strengths) ? JSON.stringify(parsed.strengths) : null,
+      Array.isArray(parsed.improvements) ? JSON.stringify(parsed.improvements) : null,
+      Array.isArray(parsed.coaching_tips) ? JSON.stringify(parsed.coaching_tips) : null,
+      Array.isArray(parsed.action_items) ? JSON.stringify(parsed.action_items) : null,
+      parsed.summary || null,
+      JSON.stringify(parsed)
+    )
+
+    const row = db.prepare('SELECT * FROM call_analyses WHERE id = ?').get(result.lastInsertRowid)
+    res.json({ analysis: { ...row, raw_data: parsed }, generated: parsed })
+  } catch (err) {
+    console.error('[Call analysis] Error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/call-analyses/:id', requireAuth, (req, res) => {
+  const { id } = req.params
+  const existing = db.prepare('SELECT id FROM call_analyses WHERE id = ? AND user_id = ?').get(id, req.userId)
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+  db.prepare('DELETE FROM call_analyses WHERE id = ?').run(id)
+  res.json({ success: true })
+})
+
+/* ---------- P5.4: self-improving AI pattern engine ---------- */
+
+// GET /api/learn/patterns — analyze outcomes across all scripts for this user
+app.get('/api/learn/patterns', requireAuth, (req, res) => {
+  try {
+    const scripts = db.prepare(`
+      SELECT id, method, call_type, duration, language, outcome, notes, segments_json, objections_json, created_at
+      FROM scripts WHERE user_id = ? AND outcome IS NOT NULL AND outcome != 'pending'
+    `).all(req.userId)
+
+    const totalScripts = db.prepare('SELECT COUNT(*) as c FROM scripts WHERE user_id = ? AND outcome IS NOT NULL AND outcome != \'pending\'').get(req.userId)?.c || 0
+
+    if (scripts.length === 0) {
+      return res.json({
+        methodStats: [],
+        callTypeStats: [],
+        topPerforming: [],
+        losingPatterns: [],
+        insights: [],
+        totalScripts: 0,
+        totalWins: 0,
+        totalLosses: 0,
+        overallWinRate: 0,
+        minimumData: false,
+      })
+    }
+
+    // Group by method
+    const methodMap = {}
+    scripts.forEach(s => {
+      const key = s.method || 'unknown'
+      if (!methodMap[key]) methodMap[key] = { method: key, wins: 0, losses: 0, total: 0 }
+      methodMap[key].total++
+      if (s.outcome === 'won') methodMap[key].wins++
+      if (s.outcome === 'lost' || s.outcome === 'no_deal') methodMap[key].losses++
+    })
+    const methodStats = Object.values(methodMap).map(m => ({
+      ...m,
+      winRate: m.total > 0 ? Math.round((m.wins / m.total) * 1000) / 10 : 0,
+    }))
+
+    // Group by call type
+    const ctMap = {}
+    scripts.forEach(s => {
+      const key = s.call_type || 'unknown'
+      if (!ctMap[key]) ctMap[key] = { callType: key, wins: 0, losses: 0, total: 0 }
+      ctMap[key].total++
+      if (s.outcome === 'won') ctMap[key].wins++
+      if (s.outcome === 'lost' || s.outcome === 'no_deal') ctMap[key].losses++
+    })
+    const callTypeStats = Object.values(ctMap).map(c => ({
+      ...c,
+      winRate: c.total > 0 ? Math.round((c.wins / c.total) * 1000) / 10 : 0,
+    }))
+
+    // Top performing scripts (won)
+    const topPerforming = scripts
+      .filter(s => s.outcome === 'won')
+      .slice(0, 10)
+      .map(s => ({ id: s.id, method: s.method, callType: s.call_type, duration: s.duration, outcome: s.outcome }))
+
+    // Total wins/losses
+    const totalWins = scripts.filter(s => s.outcome === 'won').length
+    const totalLosses = scripts.filter(s => s.outcome === 'lost' || s.outcome === 'no_deal').length
+    const overallWinRate = scripts.length > 0 ? Math.round((totalWins / scripts.length) * 1000) / 10 : 0
+
+    // Insights generated from data patterns
+    const insights = []
+    // Best methodology
+    if (methodStats.length >= 2) {
+      const best = methodStats.reduce((a, b) => a.winRate > b.winRate ? a : b)
+      if (best.total >= 2) insights.push(`${best.method} methodology wins ${best.winRate}% of the time (${best.total} calls)`)
+    }
+    // Best call type
+    if (callTypeStats.length >= 2) {
+      const best = callTypeStats.reduce((a, b) => a.winRate > b.winRate ? a : b)
+      if (best.total >= 2) insights.push(`${best.callType} calls have the highest win rate at ${best.winRate}%`)
+    }
+    // Duration correlation
+    const wonDurations = scripts.filter(s => s.outcome === 'won').map(s => s.duration).filter(Boolean)
+    const lostDurations = scripts.filter(s => s.outcome === 'lost' || s.outcome === 'no_deal').map(s => s.duration).filter(Boolean)
+    if (wonDurations.length >= 2 && lostDurations.length >= 2) {
+      const avgWon = Math.round(wonDurations.reduce((a, b) => a + b, 0) / wonDurations.length)
+      const avgLost = Math.round(lostDurations.reduce((a, b) => a + b, 0) / lostDurations.length)
+      if (avgWon !== avgLost) insights.push(`Winning calls average ${avgWon} min vs ${avgLost} min for lost calls`)
+    }
+    // Overall win rate
+    if (scripts.length >= 3) insights.push(`Overall win rate: ${overallWinRate}% across ${scripts.length} calls`)
+
+    // Losing patterns
+    const losingPatterns = []
+    const lostScripts = scripts.filter(s => s.outcome === 'lost' || s.outcome === 'no_deal')
+    const shortLostCalls = lostScripts.filter(s => s.duration && s.duration < 15)
+    if (shortLostCalls.length >= 2) {
+      losingPatterns.push({ pattern: `Short calls under 15 min lose ${Math.round((shortLostCalls.length / lostScripts.length) * 100)}% of the time`, suggestion: 'Consider extending calls to 20-30 min for better engagement' })
+    }
+    // Method-specific losing patterns
+    methodStats.forEach(m => {
+      if (m.losses > m.wins && m.total >= 2) {
+        losingPatterns.push({ pattern: `${m.method} has a ${100 - m.winRate}% loss rate (${m.total} calls)`, suggestion: `Try a different methodology for this call type or refine your ${m.method} approach` })
+      }
+    })
+
+    res.json({
+      methodStats,
+      callTypeStats,
+      topPerforming,
+      losingPatterns,
+      insights,
+      totalScripts,
+      totalWins,
+      totalLosses,
+      overallWinRate,
+      minimumData: totalScripts >= 3,
+    })
+  } catch (err) {
+    console.error('[Learn patterns] Error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/learn/suggest — get AI-powered improvement suggestions based on patterns
+app.post('/api/learn/suggest', requireAuth, canGenerate, async (req, res) => {
+  const { method, call_type, product_name } = req.body
+
+  try {
+    // Get user's outcome data
+    const scripts = db.prepare(`
+      SELECT id, method, call_type, duration, language, outcome, notes, segments_json, objections_json
+      FROM scripts WHERE user_id = ? AND outcome IS NOT NULL AND outcome != 'pending'
+    `).all(req.userId)
+
+    const totalWins = scripts.filter(s => s.outcome === 'won').length
+    const totalLosses = scripts.filter(s => s.outcome === 'lost' || s.outcome === 'no_deal').length
+    const total = scripts.length
+
+    if (total < 3) {
+      return res.json({
+        suggestions: [],
+        patternContext: { method, callType: call_type, winRate: 0, sampleSize: total },
+        learnedAdjustments: {},
+        minimumData: false,
+      })
+    }
+
+    // Get winning scripts for context
+    const winningScripts = scripts.filter(s => s.outcome === 'won')
+    const losingScripts = scripts.filter(s => s.outcome === 'lost' || s.outcome === 'no_deal')
+
+    // Method-specific win rate
+    const methodScripts = scripts.filter(s => s.method === method)
+    const methodWins = methodScripts.filter(s => s.outcome === 'won').length
+    const methodWinRate = methodScripts.length > 0 ? Math.round((methodWins / methodScripts.length) * 1000) / 10 : 0
+
+    // Build context from winning scripts
+    const winningSegments = winningScripts.slice(0, 5).map(s => {
+      try {
+        const segs = JSON.parse(s.segments_json || '[]')
+        return segs.slice(0, 2).map(seg => seg.say?.join(' ') || seg.content || '').join(' ').slice(0, 200)
+      } catch { return '' }
+    }).filter(Boolean).join('\n')
+
+    const winningObjections = winningScripts.slice(0, 5).map(s => {
+      try {
+        const objs = JSON.parse(s.objections_json || '[]')
+        return objs.slice(0, 3).map(o => `${o.objection || o.question} → ${o.response || o.answer}`).join('; ')
+      } catch { return '' }
+    }).filter(Boolean).join('\n')
+
+    const losingNotes = losingScripts.slice(0, 5).map(s => s.notes || '').filter(Boolean).join('\n')
+
+    const cfg = getUserChatConfig(req)
+    const systemPrompt = `You are an elite sales optimization AI. Based on real call outcome data, suggest specific improvements for future scripts.
+
+USER'S PERFORMANCE DATA:
+- Total calls tracked: ${total}
+- Wins: ${totalWins}, Losses: ${totalLosses}
+- Overall win rate: ${Math.round((totalWins / total) * 100)}%
+- ${method} win rate: ${methodWinRate}% (${methodScripts.length} calls)
+
+WINNING SCRIPT PATTERNS:
+${winningSegments || 'Not enough data'}
+
+WINNING OBJECTION HANDLING:
+${winningObjections || 'Not enough data'}
+
+LOSING CALL NOTES:
+${losingNotes || 'No notes available'}
+
+Return ONLY valid JSON with this structure:
+{
+  "suggestions": [
+    { "area": "opening|discovery|objection_handling|closing|pacing", "current": "what scripts typically do", "recommended": "what winning scripts do differently", "why": "explanation based on data", "confidence": 0.0-1.0 }
+  ],
+  "learnedAdjustments": {
+    "optimalDuration": number (minutes),
+    "recommendedPersona": "empathetic|direct|consultative|authoritative",
+    "keyObjections": ["top 3 objections to prepare for"],
+    "openingStyle": "question-based|statement-based|pain-point|empathetic"
+  }
+}
+
+Give 3-5 specific, actionable suggestions based on the data patterns. If data is insufficient, give general best-practice suggestions with lower confidence.`
+
+    const userContent = `Suggest improvements for ${method || 'sales'} ${call_type || 'call'} scripts${product_name ? ` for ${product_name}` : ''}.`
+
+    const response = await fetchAIModel(cfg, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ], false)
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    }
+
+    const upstreamData = await response.json()
+    const normalized = normalizeChatResponse(cfg, upstreamData)
+    const generated = normalized.message?.content || ''
+    let parsed = {}
+    try {
+      const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
+      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+    } catch (_) {
+      parsed = { raw: generated }
+    }
+
+    // Cache patterns
+    db.prepare(`
+      INSERT INTO learn_patterns (user_id, method, call_type, wins, losses, win_rate, insights_json, computed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      req.userId,
+      method || null,
+      call_type || null,
+      totalWins,
+      totalLosses,
+      Math.round((totalWins / total) * 1000) / 10,
+      JSON.stringify(parsed.suggestions || []),
+    )
+
+    res.json({
+      suggestions: parsed.suggestions || [],
+      patternContext: { method, callType: call_type, winRate: methodWinRate, sampleSize: total },
+      learnedAdjustments: parsed.learnedAdjustments || {},
+      minimumData: true,
+    })
+  } catch (err) {
+    console.error('[Learn suggest] Error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/learn/refresh — force refresh pattern cache
+app.post('/api/learn/refresh', requireAuth, (req, res) => {
+  try {
+    // Clear old patterns
+    db.prepare('DELETE FROM learn_patterns WHERE user_id = ?').run(req.userId)
+
+    // Re-fetch patterns via GET endpoint logic (just return success, the GET endpoint will compute fresh)
+    res.json({ success: true, message: 'Pattern cache cleared. Call GET /api/learn/patterns to refresh.' })
+  } catch (err) {
+    console.error('[Learn refresh] Error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 /* ---------- P7.2 sentiment analysis ---------- */

@@ -17,6 +17,9 @@ import ProductForm from "./src/components/ProductForm.jsx";
 import ProductDetail from "./src/components/ProductDetail.jsx";
 import StudioView from "./src/components/StudioView.jsx";
 import TeamView from "./src/components/TeamView.jsx";
+import CallAnalysisView from "./src/components/CallAnalysisView.jsx";
+import SelfImprovementView from "./src/components/SelfImprovementView.jsx";
+import VoiceDNA from "./src/components/VoiceDNA.jsx";
 import Sidebar from "./src/components/Sidebar.jsx";
 import { useAuth } from "./src/context/AuthContext.jsx";
 import { getPreferences } from "./src/api/client.js";
@@ -50,7 +53,9 @@ export default function PitchStudio() {
     // Members default to scripts view
     const saved = localStorage.getItem('ps_view');
     return saved || 'products';
-  }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap
+  }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | selfimprove | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap | voice
+  // Persist current view so refresh stays on the same page
+  useEffect(() => { localStorage.setItem('ps_view', view); }, [view]);
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [active, setActive] = useState(null); // active product for studio
@@ -58,6 +63,7 @@ export default function PitchStudio() {
   const [studioNonce, setStudioNonce] = useState(0);
   const [staff, setStaff] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [analysisScriptId, setAnalysisScriptId] = useState(null); // for navigating to analysis from studio
 
   // P2.1: PWA install prompt
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -179,6 +185,7 @@ export default function PitchStudio() {
               staff={staff}
               onBack={() => setView("products")}
               canGenerate={canGenerate}
+              onAnalyze={(script) => { setAnalysisScriptId(script?.id || null); setView("analysis"); }}
             />
           )}
           {view === "scripts" && (
@@ -220,8 +227,17 @@ export default function PitchStudio() {
           {view === "coaching" && (
             <CoachingInsightsView />
           )}
+          {view === "analysis" && (
+            <CallAnalysisView products={products} initialScriptId={analysisScriptId} onBack={() => setView("products")} />
+          )}
           {view === "abtesting" && (
             <ABTestingView products={products} />
+          )}
+          {view === "selfimprove" && (
+            <SelfImprovementView />
+          )}
+          {view === "voice" && (
+            <VoiceDNA />
           )}
           {view === "leaderboard" && (
             <LeaderboardView />

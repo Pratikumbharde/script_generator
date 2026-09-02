@@ -1,11 +1,11 @@
-const CACHE_NAME = 'pitch-studio-v2';
+const CACHE_NAME = 'pitch-studio-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/main.jsx',
 ];
 
-const API_CACHE_NAME = 'pitch-api-v2';
+const API_CACHE_NAME = 'pitch-api-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -55,18 +55,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets — cache first
+  // Static assets — network first, cache as fallback
+  // JS/CSS bundles change often; always fetch fresh, fall back to cache only when offline
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok && request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      });
-    })
+    fetch(request).then((networkResponse) => {
+      if (networkResponse.ok) {
+        const clone = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+      }
+      return networkResponse;
+    }).catch(() =>
+      caches.match(request)
+    )
   );
 });
 
