@@ -475,21 +475,13 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {/* Filter panel */}
         {showFilters && products.length > 0 && (
           <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span>
               <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span>
               <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span>
               <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span>
-              <button className="ps-btn ghost sm" style={{ padding: "2px 6px", minHeight: 0, lineHeight: 1 }} onClick={() => setShowStatusInfo((v) => !v)}><Info size={13} /></button>
+              <button className="ps-btn ghost sm" style={{ padding: "2px 6px", minHeight: 0, lineHeight: 1, marginLeft: 2 }} title="Status descriptions" onClick={() => setShowStatusInfo(true)}><Info size={14} /></button>
             </div>
-            {showStatusInfo && (
-              <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, marginBottom: 10, padding: "8px 12px", background: "var(--card)", borderRadius: 8, border: "1px solid var(--line)" }}>
-                <div><strong>Draft</strong> — no key fields filled</div>
-                <div><strong>Ready</strong> — some key fields filled</div>
-                <div><strong>Active</strong> — all key fields complete (one-liner, description, ICP, pain points, differentiators)</div>
-                <div><strong>Archived</strong> — manually archived</div>
-              </div>
-            )}
             <div className="dt-filter-group">
               <label>Status</label>
               <select className="fsel" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
@@ -589,6 +581,35 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button className="ds-btn-ter" onClick={() => setConfirmDel(null)}>Keep product</button>
                 <button className="ds-btn-dan" onClick={async () => { try { await onDelete(confirmDel); } catch (e) { console.error("Delete failed:", e); } setConfirmDel(null); }}>Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showStatusInfo && (
+          <div className="overlay" onClick={() => setShowStatusInfo(false)}>
+            <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>Product statuses</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 10px", borderRadius: 4, flexShrink: 0 }}><span className="ds-status-dot" />Active</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.4 }}>All 5 key fields complete (one-liner, description, ideal customer profile, pain points, differentiators)</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 10px", borderRadius: 4, flexShrink: 0 }}><span className="ds-status-dot" />Ready</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.4 }}>Some key fields filled — enough to generate scripts</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 10px", borderRadius: 4, flexShrink: 0 }}><span className="ds-status-dot" />Draft</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.4 }}>No key fields filled yet — product needs more detail</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 10px", borderRadius: 4, flexShrink: 0 }}><span className="ds-status-dot" />Archived</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.4 }}>Manually archived — hidden from default view</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+                <button className="ps-btn pri sm" onClick={() => setShowStatusInfo(false)}>Got it</button>
               </div>
             </div>
           </div>
