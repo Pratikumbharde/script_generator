@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pitch Studio — Tester Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0f172a;
+  --ink-soft: #334155;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --accent: #4f46e5;
+  --accent-light: #818cf8;
+  --accent-bg: #eef2ff;
+  --surface: #f8fafc;
+  --card: #ffffff;
+  --line: #e2e8f0;
+  --line-soft: #f1f5f9;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --radius: 10px;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f1f5f9;
+    --ink-soft: #cbd5e1;
+    --muted: #94a3b8;
+    --faint: #64748b;
+    --accent: #818cf8;
+    --accent-light: #a5b4fc;
+    --accent-bg: #1e1b4b;
+    --surface: #0f172a;
+    --card: #1e293b;
+    --line: #334155;
+    --line-soft: #1e293b;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #f1f5f9; --ink-soft: #cbd5e1; --muted: #94a3b8; --faint: #64748b;
+  --accent: #818cf8; --accent-light: #a5b4fc; --accent-bg: #1e1b4b;
+  --surface: #0f172a; --card: #1e293b; --line: #334155; --line-soft: #1e293b;
+  --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--ink);
+  line-height: 1.65;
+  font-size: 15px;
+}
+
+/* Layout */
+.page { max-width: 960px; margin: 0 auto; padding: 48px 28px 96px; }
+
+/* Hero */
+.hero { text-align: center; padding: 64px 0 48px; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+  background: var(--accent-bg); color: var(--accent); padding: 5px 14px;
+  border-radius: 20px; letter-spacing: .03em; text-transform: uppercase; margin-bottom: 20px;
+}
+.hero h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: 42px;
+  line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 16px;
+}
+.hero p { color: var(--muted); font-size: 17px; max-width: 560px; margin: 0 auto 28px; }
+.hero-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 14px; font-size: 13px; font-weight: 500; color: var(--ink-soft);
+}
+
+/* Section */
+.section { margin-top: 56px; }
+.section-eyebrow {
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  margin-bottom: 6px;
+}
+.section h2 {
+  font-family: var(--font-display); font-weight: 700; font-size: 26px;
+  line-height: 1.2; margin-bottom: 10px; color: var(--ink);
+}
+.section > p { color: var(--muted); margin-bottom: 20px; max-width: 720px; }
+
+/* Flow diagram */
+.flow {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  justify-content: center; margin: 28px 0 40px;
+}
+.flow-step {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  min-width: 110px; max-width: 140px;
+}
+.flow-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; margin-bottom: 8px; border: 1px solid var(--line);
+  background: var(--card);
+}
+.flow-step .fnum { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.flow-step .fname { font-weight: 600; font-size: 13px; color: var(--ink); }
+.flow-arrow { font-size: 20px; color: var(--faint); padding: 0 4px; align-self: center; margin-top: -16px; }
+
+/* Cards grid */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px; transition: border-color .15s;
+}
+.card:hover { border-color: var(--accent-light); }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.card-icon {
+  width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; flex-shrink: 0;
+}
+.card-head h3 { font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.3; }
+.card p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+.card .fields {
+  margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px;
+}
+.card .field {
+  font-family: var(--font-mono); font-size: 11px; padding: 2px 7px;
+  background: var(--surface); border: 1px solid var(--line-soft); border-radius: 4px; color: var(--ink-soft);
+}
+.card .fields .req { color: var(--bad); }
+
+/* Group header */
+.group { margin-top: 40px; }
+.group-head {
+  display: flex; align-items: center; gap: 12px;
+  padding-bottom: 10px; border-bottom: 2px solid var(--line); margin-bottom: 16px;
+}
+.group-head .gicon {
+  width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; background: var(--accent-bg); color: var(--accent);
+}
+.group-head h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; }
+.group-head p { font-size: 13px; color: var(--muted); }
+
+/* Data table */
+.table-wrap { overflow-x: auto; margin: 16px 0 24px; }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table-wrap th {
+  text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); padding: 8px 12px; border-bottom: 2px solid var(--line);
+  background: var(--surface); position: sticky; top: 0;
+}
+.table-wrap td {
+  padding: 8px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top;
+}
+.table-wrap td:first-child { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.table-wrap td code {
+  font-family: var(--font-mono); font-size: 12px; background: var(--surface);
+  padding: 1px 5px; border-radius: 3px; border: 1px solid var(--line-soft);
+}
+.tag {
+  display: inline-flex; font-size: 11px; font-weight: 600; padding: 1px 7px;
+  border-radius: 4px; margin-right: 3px;
+}
+.tag-auth { background: #fef3c7; color: #92400e; }
+.tag-gen { background: #dbeafe; color: #1e40af; }
+.tag-crud { background: #dcfce7; color: #166534; }
+
+/* Notes */
+.note {
+  background: var(--accent-bg); border-left: 3px solid var(--accent);
+  padding: 14px 18px; border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 13.5px; color: var(--ink-soft); margin: 20px 0;
+}
+.note strong { color: var(--accent); }
+
+/* TOC */
+.toc {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px 28px; margin: 32px 0;
+  columns: 2; column-gap: 24px;
+}
+.toc a { display: block; font-size: 14px; color: var(--ink-soft); text-decoration: none; padding: 3px 0; break-inside: avoid; }
+.toc a:hover { color: var(--accent); }
+
+@media (max-width: 700px) {
+  .page { padding: 28px 16px 64px; }
+  .hero h1 { font-size: 30px; }
+  .cards { grid-template-columns: 1fr; }
+  .toc { columns: 1; }
+  .flow { gap: 0; }
+  .flow-step { min-width: 80px; max-width: 100px; }
+  .flow-step .fname { font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">Tester Guide</div>
+  <h1>Pitch Studio</h1>
+  <p>A live-call cockpit for sales teams. Enter a product once → pick methodology + call type + duration → AI generates a time-segmented script + objection handling. Scripts are saved and never regenerate unless you ask.</p>
+  <div class="hero-row">
+    <span class="hero-tag">React 18 + Vite</span>
+    <span class="hero-tag">Express + SQLite</span>
+    <span class="hero-tag">Ollama AI Proxy</span>
+    <span class="hero-tag">JWT Auth</span>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#flow">User Flow</a>
+  <a href="#sell">Sell — Products, Call Studio, Scripts</a>
+  <a href="#prepare">Prepare — Training, Practice, Role-play, Components, Battle Cards</a>
+  <a href="#intelligence">Intelligence — Analytics, Coaching, Competitors, Deal Scores, Conv. Intel, Call Analysis</a>
+  <a href="#optimize">Optimize — Refinement, AI Optimization, Self-Improvement, A/B Tests, Voice DNA</a>
+  <a href="#team">Team — Members, Leaderboard, Scheduled Calls, Permissions</a>
+  <a href="#admin">Admin — Settings, Export, Automation</a>
+  <a href="#auth">Auth & Accounts</a>
+  <a href="#api">API Reference (Quick)</a>
+  <a href="#data">Database Tables</a>
+  <a href="#testing">What to Test</a>
+</div>
+
+<!-- USER FLOW -->
+<div class="section" id="flow">
+  <div class="section-eyebrow">How it works</div>
+  <h2>User Flow</h2>
+  <p>A tester walks through this sequence to validate core functionality.</p>
+  <div class="flow">
+    <div class="flow-step"><div class="fnum">01</div><div class="flow-icon">🔐</div><div class="fname">Register / Login</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="fnum">02</div><div class="flow-icon">📦</div><div class="fname">Create Product</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="fnum">03</div><div class="flow-icon">🎙</div><div class="fname">Build Script</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="fnum">04</div><div class="flow-icon">📋</div><div class="fname">View / Manage</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="fnum">05</div><div class="flow-icon">⚡</div><div class="fname">Train &amp; Optimize</div></div>
+  </div>
+  <div class="note"><strong>Key rule:</strong> Each unique combination of product + method + call type + duration + language + region + delivery + simple + persona = one saved script. Re-generating the same combination returns the existing script, never creates a duplicate.</div>
+</div>
+
+<!-- SELL -->
+<div class="section" id="sell">
+  <div class="section-eyebrow">Section</div>
+  <h2>Sell</h2>
+  <div class="group">
+    <div class="group-head"><div class="gicon">📦</div><div><h3>Products</h3><p>Create and manage products you sell. Each product holds the value prop, ICP, differentiators, and proof points the AI uses when generating scripts.</p></div></div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-head"><h3>Product List</h3></div>
+        <p>Grid of all products. Click to open detail view; Edit and Duplicate buttons on each card. Product name is the primary identifier.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Product Form</h3></div>
+        <p>Multi-field form for creating/editing a product. Required: <strong>Name</strong>, <strong>One-liner</strong>, <strong>Description</strong>. Other fields are recommended but optional. AI-assist buttons can auto-fill fields.</p>
+        <div class="fields"><span class="field">name <span class="req">*</span></span><span class="field">category</span><span class="field">oneLiner <span class="req">*</span></span><span class="field">description <span class="req">*</span></span><span class="field">idealCustomer</span><span class="field">painPoints</span><span class="field">differentiators</span><span class="field">competitors</span><span class="field">proofPoints</span><span class="field">priceModel</span><span class="field">features</span><span class="field">commonObjections</span><span class="field">keyMessages</span><span class="field">personas</span></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Product Detail</h3></div>
+        <p>Read-only detail page showing all product fields. Actions: Edit, Duplicate, Delete, Generate Script (opens Call Studio pre-filled).</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🎙</div><div><h3>Call Studio</h3><p>The script generation cockpit. Pick a product, then configure the call and hit Generate.</p></div></div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-head"><h3>Script Configuration</h3></div>
+        <p>Step-by-step form: Call Type → Methodology → Duration → Language → Region → Delivery Style → Persona. Each combination produces a unique saved script.</p>
+        <div class="fields"><span class="field">callType</span><span class="field">method</span><span class="field">duration</span><span class="field">language</span><span class="field">region</span><span class="field">delivery</span><span class="field">simple</span><span class="field">persona</span></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Live Cockpit</h3></div>
+        <p>After generation, the script opens in a live call cockpit with time-segmented script sections, objection bank, and a live timer. Scripts are saved automatically — refreshing the page returns to the same script.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📋</div><div><h3>Scripts</h3><p>Saved scripts data table with sorting, filtering, search, campaign tags, drag-and-drop priority, pagination, and bulk actions.</p></div></div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-head"><h3>Table View</h3></div>
+        <p>Columns: #, Script name, Method, Type, Duration, Language, Region, Style, Campaign, Outcome, Last updated. Sortable columns. Column selector to show/hide. Checkbox for bulk selection. Sr. No. is continuous across pages.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Filters &amp; Search</h3></div>
+        <p>Filter panel: Product, Method, Language, Outcome, Campaign, Date range. Active filter chips show what's applied. KPI bar shows total scripts, win rate, and outcome counts — clicking a KPI filters to that outcome.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Pagination &amp; Ordering</h3></div>
+        <p>Rows per page: 10, 20, 50, 100 (saved to localStorage). Page number buttons with ellipsis. "Sort by priority" toggle enables drag-and-drop reordering. Campaign column is inline-editable.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Bulk Actions</h3></div>
+        <p>Select multiple scripts → Export details, Sync missing languages (generates the same script for each team language), or Delete in bulk.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PREPARE -->
+<div class="section" id="prepare">
+  <div class="section-eyebrow">Section</div>
+  <h2>Prepare</h2>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🎓</div><div><h3>Training</h3><p>Video-style training modules for sales methodologies. Currently informational.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">✍️</div><div><h3>Practice</h3><p>Practice responding to buyer objections. The AI plays the buyer, you type your response, and the AI scores your answer.</p></div></div>
+    <div class="note">Required fields: <strong>Product</strong>, <strong>Call Type</strong>, <strong>Method</strong>, <strong>Your response</strong> (at each turn).</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🎭</div><div><h3>Role-play</h3><p>Live AI role-play with configurable buyer persona and difficulty. The AI simulates a buyer based on your product and chosen methodology.</p></div></div>
+    <div class="note">Required fields: <strong>Product</strong>, <strong>Call Type</strong>, <strong>Sales Method</strong>, <strong>Difficulty</strong>, <strong>Language</strong>.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🧩</div><div><h3>Components</h3><p>Script component library. Save reusable openings, closes, objection handlers, discovery questions, etc., and reuse them across scripts.</p></div></div>
+    <div class="note">Required fields: <strong>Name</strong>, <strong>Type</strong>, <strong>Content</strong>. Tags are optional.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">⚔️</div><div><h3>Battle Cards</h3><p>AI-generated competitive battle cards for a selected product. Shows strengths, weaknesses, and talking points vs. competitors.</p></div></div>
+  </div>
+</div>
+
+<!-- INTELLIGENCE -->
+<div class="section" id="intelligence">
+  <div class="section-eyebrow">Section</div>
+  <h2>Intelligence</h2>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📊</div><div><h3>Analytics</h3><p>Dashboard showing script usage, win rates by method and call type, and team activity trends.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🧠</div><div><h3>Coaching Insights</h3><p>AI-generated coaching from call transcripts. Paste a transcript, select session type, and get structured feedback on technique, tone, and improvement areas.</p></div></div>
+    <div class="note">Required fields: <strong>Session type</strong>, <strong>Transcript</strong>.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🔍</div><div><h3>Competitor Intel</h3><p>Track competitors and analyze their messaging. Add a competitor, then paste their content to generate an intelligence report.</p></div></div>
+    <div class="note">Required fields for Add Competitor: <strong>Competitor name</strong>, <strong>Category</strong>, <strong>Website</strong>, <strong>Product to compare against</strong>.<br>Required fields for Analyze: <strong>Content to analyze</strong>.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">💰</div><div><h3>Deal Scores</h3><p>AI-powered deal scoring. Input deal details and get a score with win probability, risk factors, and recommended next steps.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🌡️</div><div><h3>Conversation Intelligence</h3><p>Heatmap view of conversation topics across calls. Shows topic frequency, sentiment trends, and keyword clusters.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📞</div><div><h3>Call Analysis</h3><p>Upload or record a call, get AI-powered analysis with adherence score, missed opportunities, and improvement suggestions. Uses Deepgram STT for transcription. Past analyses are searchable with sort options.</p></div></div>
+  </div>
+</div>
+
+<!-- OPTIMIZE -->
+<div class="section" id="optimize">
+  <div class="section-eyebrow">Section</div>
+  <h2>Optimize</h2>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">✏️</div><div><h3>Script Refinement</h3><p>Take a saved script and iteratively refine sections of it. Select a script, choose sections to improve, and AI rewrites them.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🤖</div><div><h3>AI Optimization</h3><p>Automated optimization suggestions. The system analyzes your scripts and proposes concrete improvements you can apply with one click.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📈</div><div><h3>Self-Improvement</h3><p>Learns from your call outcomes over time. Tracks which methods, call types, and script structures lead to wins. Shows patterns and suggestions.</p></div></div>
+    <div class="note">Required fields for A/B Prompt Variant: <strong>Method</strong>, <strong>Call type</strong>.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">⚗️</div><div><h3>A/B Tests</h3><p>Set up two script variants for the same method + call type, use them in calls, then log the outcomes to see which wins.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🧬</div><div><h3>Voice DNA</h3><p>Add company materials (pitch decks, emails, call recordings, brand guides) and the AI extracts a Voice DNA profile — tone, vocabulary, style, guidelines. Toggle it on to influence all generated scripts.</p></div></div>
+    <div class="note">Required fields for Add Document: <strong>Document name</strong>, <strong>Type</strong>, <strong>Content</strong>.<br>Voice DNA is a workspace-level toggle. When ON + profile exists, scripts follow the company voice naturally without copying source material verbatim.</div>
+  </div>
+</div>
+
+<!-- TEAM -->
+<div class="section" id="team">
+  <div class="section-eyebrow">Section</div>
+  <h2>Team</h2>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">👥</div><div><h3>Team</h3><p>Manage team members and their languages. Invite new members by email with role assignment (admin/member). Each member's languages are used for bulk script sync.</p></div></div>
+    <div class="note">Required fields: <strong>Email address</strong>, <strong>Role</strong>, <strong>Workspace name</strong> (for organization).</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🏆</div><div><h3>Leaderboard</h3><p>Ranks team members by script generation count, win rate, and activity. Filterable by time period.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📅</div><div><h3>Scheduled Calls</h3><p>Plan upcoming calls with prospect details. Links to a product and stores prospect name, company, email, date/time, duration, timezone, and notes.</p></div></div>
+    <div class="note">Required fields: <strong>Product</strong>, <strong>Prospect name</strong>, <strong>Company</strong>, <strong>Email</strong>, <strong>Date &amp; time</strong>, <strong>Duration</strong>, <strong>Timezone</strong>.</div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">🔒</div><div><h3>Permissions</h3><p>Role-based permission matrix. Configure what each role (admin, manager, member) can do — generate scripts, manage team, export data, override prompts.</p></div></div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="section" id="admin">
+  <div class="section-eyebrow">Section</div>
+  <h2>Admin</h2>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">⚙️</div><div><h3>Settings</h3><p>Workspace name, company details, API key management, webhook configuration, CRM connections.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">📥</div><div><h3>Export</h3><p>Export all workspace data as JSON or CSV for backup or migration.</p></div></div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><div class="gicon">⚡</div><div><h3>Automation</h3><p>Create rules that trigger on events (script generated, call analyzed, etc.) and send webhooks or emails. Rules use a When/Then structure.</p></div></div>
+    <div class="note">Required fields: <strong>When this happens</strong> (trigger), <strong>Then do this</strong> (action), <strong>Target URL / Email / Channel</strong>.</div>
+  </div>
+</div>
+
+<!-- AUTH -->
+<div class="section" id="auth">
+  <div class="section-eyebrow">Authentication</div>
+  <h2>Auth &amp; Accounts</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="card-head"><h3>Register</h3></div>
+      <p>Email + password (min 6 chars). Company name is optional. Creates a workspace with the user as admin.</p>
+      <div class="fields"><span class="field">email <span class="req">*</span></span><span class="field">password <span class="req">*</span></span><span class="field">company_name</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Login</h3></div>
+      <p>Returns a JWT token stored in localStorage. Token expires in 7 days. All API calls include <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Session Restore</h3></div>
+      <p>On page load, if a token exists, <code>/api/auth/me</code> is called to verify it. If valid, the user is auto-logged in. If expired, the token is cleared and the user sees the login screen.</p>
+    </div>
+  </div>
+  <div class="note"><strong>Key testing point:</strong> Unauthenticated users see only the login screen. Any direct API call without a valid token returns 401. The <code>canGenerate</code> permission check gates script generation, coaching, and call analysis endpoints.</div>
+</div>
+
+<!-- API -->
+<div class="section" id="api">
+  <div class="section-eyebrow">Reference</div>
+  <h2>API Endpoints</h2>
+  <p>All endpoints are prefixed <code>/api</code>. Auth-required endpoints need a valid JWT in the <code>Authorization</code> header. Generation endpoints additionally require the <code>canGenerate</code> permission.</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>POST</td><td><code>/auth/register</code></td><td></td><td>Create account + workspace</td></tr>
+      <tr><td>POST</td><td><code>/auth/login</code></td><td></td><td>Login, get JWT</td></tr>
+      <tr><td>GET</td><td><code>/auth/me</code></td><td><span class="tag tag-auth">JWT</span></td><td>Verify token, return user</td></tr>
+      <tr><td>GET</td><td><code>/settings</code></td><td><span class="tag tag-auth">JWT</span></td><td>Get workspace settings</td></tr>
+      <tr><td>PUT</td><td><code>/settings</code></td><td><span class="tag tag-auth">JWT</span></td><td>Update workspace name</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">Products</td></tr>
+      <tr><td>GET</td><td><code>/products</code></td><td><span class="tag tag-auth">JWT</span></td><td>List user's products</td></tr>
+      <tr><td>POST</td><td><code>/products</code></td><td><span class="tag tag-auth">JWT</span></td><td>Create product</td></tr>
+      <tr><td>PUT</td><td><code>/products/:id</code></td><td><span class="tag tag-auth">JWT</span></td><td>Update product</td></tr>
+      <tr><td>DELETE</td><td><code>/products/:id</code></td><td><span class="tag tag-auth">JWT</span></td><td>Delete product</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">Scripts</td></tr>
+      <tr><td>GET</td><td><code>/scripts</code></td><td><span class="tag tag-auth">JWT</span></td><td>List user's scripts</td></tr>
+      <tr><td>POST</td><td><code>/scripts</code></td><td><span class="tag tag-auth">JWT</span> <span class="tag tag-gen">canGen</span></td><td>Create/generate script</td></tr>
+      <tr><td>PUT</td><td><code>/scripts/reorder</code></td><td><span class="tag tag-auth">JWT</span></td><td>Bulk update sort_order</td></tr>
+      <tr><td>PUT</td><td><code>/scripts/:id</code></td><td><span class="tag tag-auth">JWT</span></td><td>Update outcome, campaign, notes</td></tr>
+      <tr><td>DELETE</td><td><code>/scripts/:id</code></td><td><span class="tag tag-auth">JWT</span></td><td>Delete script</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">Voice DNA</td></tr>
+      <tr><td>GET</td><td><code>/voice-dna</code></td><td><span class="tag tag-auth">JWT</span></td><td>Get Voice DNA profile</td></tr>
+      <tr><td>POST</td><td><code>/voice-dna/analyze</code></td><td><span class="tag tag-auth">JWT</span> <span class="tag tag-gen">canGen</span></td><td>Analyze docs → structured profile</td></tr>
+      <tr><td>PUT</td><td><code>/voice-dna/toggle</code></td><td><span class="tag tag-auth">JWT</span></td><td>Enable/disable Voice DNA</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">Team & Workspace</td></tr>
+      <tr><td>GET</td><td><code>/workspace</code></td><td><span class="tag tag-auth">JWT</span></td><td>Get workspace info</td></tr>
+      <tr><td>GET</td><td><code>/team</code></td><td><span class="tag tag-auth">JWT</span></td><td>Get team members</td></tr>
+      <tr><td>POST</td><td><code>/team/invite</code></td><td><span class="tag tag-auth">JWT</span></td><td>Invite member by email</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">Call Analysis & Coaching</td></tr>
+      <tr><td>POST</td><td><code>/call-analyses</code></td><td><span class="tag tag-auth">JWT</span> <span class="tag tag-gen">canGen</span></td><td>Analyze call recording</td></tr>
+      <tr><td>GET</td><td><code>/call-analyses</code></td><td><span class="tag tag-auth">JWT</span></td><td>List past analyses</td></tr>
+      <tr><td>POST</td><td><code>/coaching-insights/generate</code></td><td><span class="tag tag-auth">JWT</span> <span class="tag tag-gen">canGen</span></td><td>Generate coaching from transcript</td></tr>
+      <tr><td colspan="4" style="padding:4px 12px;color:var(--muted);font-weight:600;background:var(--surface)">AI Proxy</td></tr>
+      <tr><td>POST</td><td><code>/chat</code></td><td><span class="tag tag-auth">JWT</span> <span class="tag tag-gen">canGen</span></td><td>Ollama model proxy (all AI calls)</td></tr>
+      <tr><td>POST</td><td><code>/stt</code></td><td><span class="tag tag-auth">JWT</span></td><td>Deepgram STT proxy (audio → text)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- DATABASE -->
+<div class="section" id="data">
+  <div class="section-eyebrow">Reference</div>
+  <h2>Database Tables</h2>
+  <p>All data is stored in a single <code>database.sqlite</code> file. Every table is scoped to <code>user_id</code> or <code>workspace_id</code>.</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key Columns</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>users</td><td>id, email, password_hash, company_name</td><td>Login & identity</td></tr>
+      <tr><td>products</td><td>id, user_id, name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors</td><td>Product catalog for script generation</td></tr>
+      <tr><td>scripts</td><td>id, user_id, product_id, method, call_type, duration, language, region, delivery, simple, persona, opening, tone_level, tone_guidance, segments_json, objections_json, outcome, notes, sort_order, campaign</td><td>Generated scripts (unique per config combo)</td></tr>
+      <tr><td>staff</td><td>id, user_id, name, role, languages</td><td>Team member languages for bulk sync</td></tr>
+      <tr><td>workspaces</td><td>id, name, owner_id, invite_code</td><td>Team workspaces</td></tr>
+      <tr><td>workspace_members</td><td>workspace_id, user_id, role</td><td>Membership + roles</td></tr>
+      <tr><td>voice_docs</td><td>id, user_id, name, type, content, tags</td><td>Company materials for Voice DNA</td></tr>
+      <tr><td>voice_dna_profiles</td><td>id, user_id, tone, formality, communication_style, sentence_style, preferred_vocabulary, avoid_vocabulary, messaging_patterns, brand_terminology, guidelines</td><td>Structured Voice DNA profile</td></tr>
+      <tr><td>user_preferences</td><td>user_id, voice_dna_enabled</td><td>Voice DNA toggle (workspace-level)</td></tr>
+      <tr><td>competitors</td><td>id, user_id, name, category, website, product_id</td><td>Competitor tracking</td></tr>
+      <tr><td>competitor_intel</td><td>id, competitor_id, analysis_json, created_at</td><td>AI-generated competitor analysis</td></tr>
+      <tr><td>scheduled_calls</td><td>id, user_id, product_id, prospect_name, prospect_company, prospect_email, scheduled_at, duration, timezone, notes</td><td>Scheduled call calendar</td></tr>
+      <tr><td>automation_rules</td><td>id, user_id, trigger_event, action_type, target_url, payload_template, is_active</td><td>Webhook/email automation</td></tr>
+      <tr><td>coaching_insights</td><td>id, user_id, session_type, transcript, feedback_json, created_at</td><td>AI coaching feedback</td></tr>
+      <tr><td>call_analyses</td><td>id, user_id, script_id, recording_url, transcript, analysis_json, created_at</td><td>Call recording analyses</td></tr>
+      <tr><td>components</td><td>id, user_id, name, type, content, tags</td><td>Reusable script components</td></tr>
+      <tr><td>script_variants</td><td>id, user_id, group_key, variant_name, config_json, outcome</td><td>A/B test variants</td></tr>
+      <tr><td>learn_patterns</td><td>id, user_id, patterns_json, updated_at</td><td>Self-improvement patterns</td></tr>
+      <tr><td>api_keys</td><td>id, user_id, name, key_hash, created_at</td><td>API key management</td></tr>
+      <tr><td>webhooks</td><td>id, user_id, url, events, secret, is_active</td><td>Webhook delivery config</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- TESTING POINTS -->
+<div class="section" id="testing">
+  <div class="section-eyebrow">Checklist</div>
+  <h2>What to Test</h2>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:var(--accent-bg);color:var(--accent)">🔐</div><h3>Auth & Navigation</h3></div>
+      <p>• Register → auto-login → dashboard<br>• Login with wrong password → error<br>• Refresh page → stays on same view (not dashboard)<br>• Unauthenticated access → redirects to login<br>• Sidebar navigation between all views</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#dcfce7;color:#166534">📦</div><h3>Products CRUD</h3></div>
+      <p>• Create product with required fields only<br>• Edit product → changes persist<br>• Duplicate product → creates copy<br>• Delete product → confirmation → removed<br>• AI-assist buttons fill fields correctly</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#dbeafe;color:#1e40af">🎙</div><h3>Script Generation</h3></div>
+      <p>• Generate script for each call type × method combo<br>• Same combo → returns existing script (no duplicate)<br>• Voice DNA toggle ON → script follows company voice<br>• Voice DNA toggle OFF → neutral voice<br>• Script saves automatically on generation</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fef3c7;color:#92400e">📋</div><h3>Scripts Table</h3></div>
+      <p>• Sr. No. (#) is continuous across pages<br>• Pagination: change rows per page (10/20/50/100) → persists on refresh<br>• Filter by product, method, language, outcome, campaign, date<br>• Sort by any column; priority sort enables drag reorder<br>• Campaign inline-edit → saves to API<br>• Bulk select → export, sync languages, delete</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#fce7f3;color:#9d174d">🧬</div><h3>Voice DNA</h3></div>
+      <p>• Upload recording → Deepgram transcribes → saved as doc<br>• Add text document → appears in list<br>• Search/filter/sort documents<br>• Analyze → structured profile appears<br>• Toggle ON/OFF → persists per workspace<br>• Self-Improvement is separate (not affected by Voice DNA)</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#f3e8ff;color:#7c3aed">✍️</div><h3>Required Fields</h3></div>
+      <p>Every required field has a red asterisk (*) with no gap between label and asterisk. Check all forms:<br>• Login: Email*, Password*<br>• Products: Name*, One-liner*, Description*<br>• Voice DNA: Doc name*, Type*, Content*<br>• Scheduled Calls: All 7 fields are required<br>• Competitors: Name*, Category*, Website*, Product*, Content*</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#dcfce7;color:#166534">📞</div><h3>Call Analysis</h3></div>
+      <p>• Upload audio → Deepgram STT → transcript appears<br>• Paste transcript manually<br>• Analysis generates adherence score + feedback<br>• Past analyses: search, sort, filter<br>• Delete analysis → confirmation → removed</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-icon" style="background:#e0e7ff;color:#4338ca">⚡</div><h3>Edge Cases</h3></div>
+      <p>• Empty states: no products, no scripts, no team members<br>• Very long product names and descriptions<br>• Special characters in form inputs<br>• Concurrent users: same product, different outcomes<br>• Network failure during script generation → error state<br>• JWT expiry → auto-redirect to login</p>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:32px"><strong>Quick start:</strong> <code>npm install && npm run dev</code> starts both Vite (port 5173) and Express (port 3001). Register a new account, create a product, and generate your first script.</div>
+</div>
+
+</div>
+</body>
+</html>
