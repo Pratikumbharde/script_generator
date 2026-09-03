@@ -750,6 +750,10 @@ addColumnIfNotExists('scripts', 'notes', 'TEXT')
 addColumnIfNotExists('scripts', 'used_at', 'INTEGER')
 addColumnIfNotExists('products', 'workspace_id', 'INTEGER')
 addColumnIfNotExists('products', 'visibility', "TEXT DEFAULT 'private' CHECK(visibility IN ('private','workspace'))")
+addColumnIfNotExists('products', 'personas', 'TEXT')
+addColumnIfNotExists('products', 'features', 'TEXT')
+addColumnIfNotExists('products', 'common_objections', 'TEXT')
+addColumnIfNotExists('products', 'key_messages', 'TEXT')
 addColumnIfNotExists('scripts', 'workspace_id', 'INTEGER')
 addColumnIfNotExists('scripts', 'visibility', "TEXT DEFAULT 'private' CHECK(visibility IN ('private','workspace'))")
 addColumnIfNotExists('coaching_insights', 'raw_data', 'TEXT')
@@ -1208,23 +1212,23 @@ app.get('/api/products', requireAuth, (req, res) => {
 })
 
 app.post('/api/products', requireAuth, (req, res) => {
-  const { name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors, visibility = 'private' } = req.body
+  const { name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors, personas, features, common_objections, key_messages, visibility = 'private' } = req.body
   const userWs = db.prepare(
     `SELECT w.id FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id WHERE m.user_id = ? AND m.joined_at IS NOT NULL LIMIT 1`
   ).get(req.userId)
   const wsId = userWs?.id
 
   const result = db.prepare(
-    `INSERT INTO products (user_id, workspace_id, visibility, name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(req.userId, wsId || null, visibility, name || '', category || '', one_liner || '', description || '', ideal_customer || '', pain_points || '', differentiators || '', price_model || '', proof_points || '', competitors || '')
+    `INSERT INTO products (user_id, workspace_id, visibility, name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors, personas, features, common_objections, key_messages)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.userId, wsId || null, visibility, name || '', category || '', one_liner || '', description || '', ideal_customer || '', pain_points || '', differentiators || '', price_model || '', proof_points || '', competitors || '', personas || '', features || '', common_objections || '', key_messages || '')
   const row = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid)
   res.json({ product: row })
 })
 
 app.put('/api/products/:id', requireAuth, (req, res) => {
   const { id } = req.params
-  const { name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors, visibility } = req.body
+  const { name, category, one_liner, description, ideal_customer, pain_points, differentiators, price_model, proof_points, competitors, personas, features, common_objections, key_messages, visibility } = req.body
 
   const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(id)
   if (!existing) return res.status(404).json({ error: 'Not found' })
@@ -1249,6 +1253,10 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   if (price_model !== undefined) { fields.push('price_model = ?'); values.push(price_model) }
   if (proof_points !== undefined) { fields.push('proof_points = ?'); values.push(proof_points) }
   if (competitors !== undefined) { fields.push('competitors = ?'); values.push(competitors) }
+  if (personas !== undefined) { fields.push('personas = ?'); values.push(personas) }
+  if (features !== undefined) { fields.push('features = ?'); values.push(features) }
+  if (common_objections !== undefined) { fields.push('common_objections = ?'); values.push(common_objections) }
+  if (key_messages !== undefined) { fields.push('key_messages = ?'); values.push(key_messages) }
   if (visibility !== undefined) { fields.push('visibility = ?'); values.push(visibility) }
   if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' })
   values.push(id)
