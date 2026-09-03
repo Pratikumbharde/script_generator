@@ -71,7 +71,6 @@ const NAV_GROUPS = [
     id: "admin",
     label: "Admin",
     items: [
-      { id: "settings", label: "Settings" },
       { id: "export", label: "Export" },
       { id: "automation", label: "Automation" },
     ],
