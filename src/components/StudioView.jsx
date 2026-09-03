@@ -336,7 +336,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             <div className="msg">Writing your {cObj.name.toLowerCase()} script…</div>
             <div className="sub">
               {genProgress ? (
-                <>Generating language {genProgress.current} of {genProgress.total}: <b style={{ color: "var(--ink)" }}>{genProgress.langName}</b>. Each language is saved as it finishes.</>
+                <>Generating language {genProgress.current} of {genProgress.total}: <b style={{ color: "var(--ink)" }}>{genProgress.langName}</b> ({Math.round((genProgress.current / genProgress.total) * 100)}%). Each language is saved as it finishes.</>
               ) : (
                 <>Tailoring {mObj.name} for a {(REGIONS.find((r) => r.id === region) || {}).name} audience. This runs once, then it's saved.</>
               )}

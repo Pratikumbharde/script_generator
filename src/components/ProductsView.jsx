@@ -255,7 +255,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
                 <Archive size={14} /> Archive
               </button>
             )}
-            <button className="dt-dropdown-item danger" onClick={(e) => { e.stopPropagation(); setConfirmDel(p); setActiveMenu(null); }}>
+            <button className="dt-dropdown-item danger" title="Delete" onClick={(e) => { e.stopPropagation(); setConfirmDel(p); setActiveMenu(null); }}>
               <Trash2 size={14} /> Delete
             </button>
           </div>
@@ -285,10 +285,10 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         <div className="epc-name" title={p.name}>{p.name}</div>
         <div className="epc-desc">{desc || "No description added"}</div>
 
-        {/* Meta: scripts + updated + readiness */}
+        {/* Meta: scripts + date + readiness */}
         <div className="epc-meta">
           <span className="epc-meta-item"><b>{sc}</b> script{sc === 1 ? "" : "s"}</span>
-          <span className="epc-meta-item">Updated {fmtDate(p.created_at || p.createdAt)}</span>
+          <span className="epc-meta-item">{p.updated_at ? `Updated ${fmtDate(p.updated_at)}` : `Created ${fmtDate(p.created_at || p.createdAt)}`}</span>
           <span className="epc-meta-item" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setActiveReadiness(activeReadiness === p.id ? null : p.id); }}>
             <Sparkles size={11} style={{ color: readiness >= 80 ? "var(--ok)" : readiness >= 50 ? "var(--amber)" : "#B23237" }} />
             <span style={{ fontWeight: 600, color: "var(--ink)" }}>{readiness}%</span> AI ready
@@ -328,9 +328,9 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
 
         {/* Inline quick actions (hover reveal) */}
         <div className="epc-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="epc-act-open" onClick={(e) => { e.stopPropagation(); onOpen(p); }}><Eye size={13} /> Open</button>
-          <button className="epc-act-edit" onClick={(e) => { e.stopPropagation(); onEdit(p); }}><Pencil size={13} /> Edit</button>
-          <button className="epc-act-del" onClick={(e) => { e.stopPropagation(); setConfirmDel(p); }}><Trash2 size={13} /></button>
+          <button className="epc-act-open" title="Open" onClick={(e) => { e.stopPropagation(); onOpen(p); }}><Eye size={13} /> Open</button>
+          <button className="epc-act-edit" title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(p); }}><Pencil size={13} /> Edit</button>
+          <button className="epc-act-del" title="Delete" onClick={(e) => { e.stopPropagation(); setConfirmDel(p); }}><Trash2 size={13} /></button>
           <div style={{ marginLeft: "auto" }}><ActionMenu p={p} /></div>
         </div>
 
@@ -341,7 +341,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>This also removes its scripts.</div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="ps-btn ghost sm" onClick={(e) => { e.stopPropagation(); setConfirmDel(null); }}>Cancel</button>
-              <button className="ps-btn pri sm" style={{ background: "#E74C3C", borderColor: "#E74C3C" }} onClick={(e) => { e.stopPropagation(); onDelete(p); setConfirmDel(null); }}>Delete</button>
+              <button className="ps-btn pri sm" style={{ background: "#E74C3C", borderColor: "#E74C3C" }} onClick={async (e) => { e.stopPropagation(); try { await onDelete(p); } catch (e2) { console.error("Delete failed:", e2); } setConfirmDel(null); }}>Delete</button>
             </div>
           </div>
         )}
@@ -406,8 +406,8 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         </td>
         {/* Scripts — 8% */}
         <td style={{ width: "8%", textAlign: "center" }}><b>{sc}</b></td>
-        {/* Updated — 14% */}
-        <td style={{ width: "14%", color: "var(--muted)", fontSize: 12.5 }}>{fmtDate(p.created_at || p.createdAt)}</td>
+        {/* Date — 14% */}
+        <td style={{ width: "14%", color: "var(--muted)", fontSize: 12.5 }}>{p.updated_at ? `Upd ${fmtDate(p.updated_at)}` : fmtDate(p.created_at || p.createdAt)}</td>
         {/* Actions — 6% */}
         <td style={{ width: "6%" }} onClick={(e) => e.stopPropagation()}>
           <ActionMenu p={p} alignRight={false} />
@@ -446,7 +446,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
           <div className="dt-header">
             <div className="dt-search">
               <Search size={15} className="dt-search-icon" />
-              <input placeholder="Search products…" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
+              <input placeholder="Search products…" maxLength={200} value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
               {query && <button className="dt-search-clear" onClick={() => { setQuery(""); setPage(1); }}><X size={13} /></button>}
             </div>
             <button className={`dt-filter-btn ${statusFilter !== "all" ? "on" : ""}`} onClick={() => setShowFilters((s) => !s)}>
@@ -522,7 +522,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
                       <th style={{ width: "14%" }}>Status</th>
                       <th style={{ width: "20%" }}>AI Readiness</th>
                       <th style={{ width: "8%", textAlign: "center" }}>Scripts</th>
-                      <th style={{ width: "14%" }}>Updated</th>
+                      <th style={{ width: "14%" }}>Date</th>
                       <th style={{ width: "6%" }} />
                     </tr>
                   </thead>
@@ -563,7 +563,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
               </p>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button className="ds-btn-ter" onClick={() => setConfirmDel(null)}>Keep product</button>
-                <button className="ds-btn-dan" onClick={() => { onDelete(confirmDel); setConfirmDel(null); }}>Delete</button>
+                <button className="ds-btn-dan" onClick={async () => { try { await onDelete(confirmDel); } catch (e) { console.error("Delete failed:", e); } setConfirmDel(null); }}>Delete</button>
               </div>
             </div>
           </div>

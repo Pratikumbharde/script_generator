@@ -525,7 +525,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                 ) : (
                   <div className="dt-dropdown-label">Product removed</div>
                 )}
-                <button className="dt-dropdown-item danger" onClick={(e) => { e.stopPropagation(); setConfirmDel(r); setActiveDropdown(null); }}>
+                <button className="dt-dropdown-item danger" title="Delete" onClick={(e) => { e.stopPropagation(); setConfirmDel(r); setActiveDropdown(null); }}>
                   <Trash2 size={14} /> Delete
                 </button>
               </div>
@@ -716,6 +716,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                 <Search size={15} className="dt-search-icon" />
                 <input
                   type="text"
+                  maxLength={200}
                   placeholder="Search scripts, products, personas..."
                   value={filters.q}
                   onChange={(e) => setFilters({ ...filters, q: e.target.value })}

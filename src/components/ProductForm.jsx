@@ -125,7 +125,8 @@ export default function ProductForm({ product, onCancel, onSaved }) {
   const [errors, setErrors] = useState({});
   const [aiLoading, setAiLoading] = useState({});
   const [openSections, setOpenSections] = useState(() => {
-    // Open the first incomplete section by default
+    // When editing, open basics by default; when creating, open first incomplete section
+    if (isEdit) return new Set(["basics"]);
     const firstIncomplete = SECTIONS.find((s) => getSectionStatus(s.id, initial) !== "done");
     return new Set([firstIncomplete?.id || "basics"]);
   });
@@ -166,7 +167,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
 
   const doSave = async (draft = false) => {
     if (!draft && !validate()) return;
-    setSaving(true);
+    setSaving(draft ? "draft" : "save");
     try {
       if (isEdit) {
         await updateProduct(product.id, toPayload());
@@ -175,7 +176,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
       }
       setDirty(false);
       setSavedAt(new Date());
-      if (!draft) onSaved();
+      onSaved();
     } catch (err) {
       console.error("Save failed:", err);
     } finally {
@@ -185,7 +186,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
 
   /* Auto-save draft every 10s when dirty */
   useEffect(() => {
-    if (!dirty || saving) return;
+    if (!dirty || !!saving) return;
     autoSaveRef.current = setTimeout(() => {
       if (f.name.trim()) doSave(true);
     }, 10000);
@@ -385,15 +386,15 @@ export default function ProductForm({ product, onCancel, onSaved }) {
                 {dirty ? "Unsaved changes" : savedAt ? "Saved just now" : "Auto-save enabled"}
               </div>
               <div style={{ flex: 1 }} />
-              <button className="ds-btn-sec" disabled={saving} onClick={() => doSave(true)}>
-                {saving ? <span className="spinner dark" /> : <Save size={14} style={{ marginRight: 5 }} />}
-                Save draft
+              <button className="ds-btn-sec" disabled={!!saving} onClick={() => doSave(true)}>
+                {saving === "draft" ? <span className="spinner dark" /> : <Save size={14} style={{ marginRight: 5 }} />}
+                {saving === "draft" ? "Saving…" : "Save draft"}
               </button>
-              <button className="ds-btn-pri" disabled={saving || !f.name.trim() || !f.oneLiner.trim() || !f.description.trim()} onClick={() => doSave(false)}>
-                {saving ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, marginRight: 8 }} /> : null}
-                {isEdit ? "Save changes" : "Save product"}
+              <button className="ds-btn-pri" disabled={!!saving || !f.name.trim() || !f.oneLiner.trim() || !f.description.trim()} onClick={() => doSave(false)}>
+                {saving === "save" && <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, marginRight: 8 }} />}
+                {saving === "save" ? (isEdit ? "Saving…" : "Saving…") : (isEdit ? "Save changes" : "Save product")}
               </button>
-              <button className="ds-btn-ter" onClick={onCancel} disabled={saving}>
+              <button className="ds-btn-ter" onClick={onCancel} disabled={!!saving}>
                 <X size={14} style={{ marginRight: 4 }} />
                 Cancel
               </button>

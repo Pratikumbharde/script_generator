@@ -754,6 +754,7 @@ addColumnIfNotExists('products', 'personas', 'TEXT')
 addColumnIfNotExists('products', 'features', 'TEXT')
 addColumnIfNotExists('products', 'common_objections', 'TEXT')
 addColumnIfNotExists('products', 'key_messages', 'TEXT')
+addColumnIfNotExists('products', 'updated_at', 'DATETIME')
 addColumnIfNotExists('scripts', 'workspace_id', 'INTEGER')
 addColumnIfNotExists('scripts', 'visibility', "TEXT DEFAULT 'private' CHECK(visibility IN ('private','workspace'))")
 addColumnIfNotExists('coaching_insights', 'raw_data', 'TEXT')
@@ -1258,7 +1259,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   if (common_objections !== undefined) { fields.push('common_objections = ?'); values.push(common_objections) }
   if (key_messages !== undefined) { fields.push('key_messages = ?'); values.push(key_messages) }
   if (visibility !== undefined) { fields.push('visibility = ?'); values.push(visibility) }
-  if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' })
+  fields.push('updated_at = ?'); values.push(new Date().toISOString())
   values.push(id)
 
   db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values)
