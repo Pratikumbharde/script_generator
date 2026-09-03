@@ -200,18 +200,18 @@ export default function VoiceDNA() {
           <div className="ps-form" style={{ marginBottom: 24, maxWidth: 720 }}>
             <div className="frow two">
               <div>
-                <label className="flab">Document name</label>
+                <label className="flab">Document name<span className="req">*</span></label>
                 <LimitedInput className="finp" maxLength={200} placeholder="e.g. Q3 Pitch Deck" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </div>
               <div>
-                <label className="flab">Type</label>
+                <label className="flab">Type<span className="req">*</span></label>
                 <select className="fsel" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                   {DOC_TYPES.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
                 </select>
               </div>
             </div>
             <div className="frow">
-              <label className="flab">Content <span className="opt">(paste text, transcript, or key excerpts)</span></label>
+              <label className="flab">Content<span className="req">*</span> <span className="opt">(paste text, transcript, or key excerpts)</span></label>
               <LimitedTextarea className="ftext" maxLength={10000} placeholder="Paste the text here. For a pitch deck, paste the slides' bullet points. For an email, paste the full copy." value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
             </div>
             <div className="frow">

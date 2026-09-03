@@ -1139,7 +1139,7 @@ export default function CompetitorIntelView() {
             </div>
             {addError && <div className="err" style={{ marginBottom: 14 }}>{addError}</div>}
             <div className="frow" style={{ marginBottom: 14 }}>
-              <label className="flab">Competitor name *</label>
+              <label className="flab">Competitor name<span className="req">*</span></label>
               <LimitedInput
                 className="finp"
                 maxLength={200}
@@ -1149,7 +1149,7 @@ export default function CompetitorIntelView() {
               />
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
-              <label className="flab">Category</label>
+              <label className="flab">Category<span className="req">*</span></label>
               <LimitedInput
                 className="finp"
                 maxLength={200}
@@ -1159,7 +1159,7 @@ export default function CompetitorIntelView() {
               />
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
-              <label className="flab">Website</label>
+              <label className="flab">Website<span className="req">*</span></label>
               <LimitedInput
                 className="finp"
                 maxLength={500}
@@ -1169,7 +1169,7 @@ export default function CompetitorIntelView() {
               />
             </div>
             <div className="frow" style={{ marginBottom: 18 }}>
-              <label className="flab">Product to compare against</label>
+              <label className="flab">Product to compare against<span className="req">*</span></label>
               <select
                 className="finp"
                 value={addForm.product_id}
@@ -1227,7 +1227,7 @@ export default function CompetitorIntelView() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className="flab">Content to analyze</label>
+              <label className="flab">Content to analyze<span className="req">*</span></label>
               <LimitedTextarea
                 className="finp"
                 maxLength={5000}

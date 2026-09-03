@@ -505,7 +505,7 @@ Evaluate the response.`;
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <label className="flab">Your response</label>
+          <label className="flab">Your response<span className="req">*</span></label>
           <div
             style={{
               padding: 14,
@@ -959,7 +959,7 @@ Evaluate the response.`;
 
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                    <label className="flab">Your response</label>
+                    <label className="flab">Your response<span className="req">*</span></label>
                     <span style={{ fontSize: 11, fontWeight: 600, color: wcHint ? (wc < 15 ? "#B5720F" : "#B23237") : "var(--faint)" }}>
                       {wc > 0 && <>{wc} words {wcHint && <span>· {wcHint}</span>}</>}
                     </span>
@@ -1088,7 +1088,7 @@ Evaluate the response.`;
 
                 {/* User response */}
                 <div style={{ marginBottom: 18 }}>
-                  <label className="flab">Your response</label>
+                  <label className="flab">Your response<span className="req">*</span></label>
                   <div
                     style={{
                       padding: 14,

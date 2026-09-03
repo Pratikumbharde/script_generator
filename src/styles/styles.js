@@ -414,6 +414,17 @@ html[data-theme="dark"]{
 .ca-history-toolbar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line-soft);background:var(--surface)}
 @keyframes vdna-spin{to{transform:rotate(360deg)}}
 
+/* Drag-and-drop */
+.dt-drag-handle{cursor:grab;color:var(--muted);opacity:0.5;transition:opacity .15s}
+.dt-drag-handle:hover{opacity:1}
+.dt-drag-over{border-top:2px solid var(--accent)!important}
+
+/* Campaign tags */
+.dt-campaign-tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent-ink);cursor:pointer;transition:background .15s}
+.dt-campaign-tag:hover{background:var(--accent);color:#fff}
+.dt-campaign-input{font-size:12px;padding:2px 6px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);outline:none;min-width:80px}
+.dt-campaign-input:focus{border-color:var(--accent)}
+
 /* Error */
 .ca-error{padding:12px 16px;background:#FEE2E2;color:#DC2626;border-radius:10px;font-size:14px;margin:12px 0}
 
@@ -1934,10 +1945,17 @@ html[data-theme="dark"]{
 .ds-install-prompt .actions{display:flex;gap:8px;align-items:center}
 
 /* --- Pagination --- */
-.ds-pagination{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:10px 0;font-size:13px;color:var(--muted)}
+.ds-pagination{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding:10px 0;font-size:13px;color:var(--muted);flex-wrap:wrap;gap:8px}
+.ds-pagination-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .ds-pagination-info{font-weight:600;color:var(--faint)}
-.ds-pagination-actions{display:flex;align-items:center;gap:8px}
-.ds-pagination-pages{font-weight:600;color:var(--ink);font-size:12.5px;min-width:90px;text-align:center}
+.ds-pagination-rows{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.ds-pagination-select{font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);outline:none;cursor:pointer}
+.ds-pagination-select:focus{border-color:var(--accent)}
+.ds-pagination-actions{display:flex;align-items:center;gap:4px}
+.ds-pagination-num{min-width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:8px;background:none;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;transition:.13s}
+.ds-pagination-num:hover{background:var(--surface);border-color:var(--line-soft)}
+.ds-pagination-num.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ds-pagination-ellipsis{padding:0 4px;color:var(--faint);font-size:13px;font-weight:700;letter-spacing:2px}
 
 /* --- Script Refinement Workspace --- */
 .ds-script-card{display:block;width:100%;text-align:left;padding:14px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:.13s}

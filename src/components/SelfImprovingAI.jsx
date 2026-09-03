@@ -186,13 +186,13 @@ export default function SelfImprovingAI() {
 
                 <div className="frow two" style={{ maxWidth: 500, marginBottom: 18 }}>
                   <div>
-                    <label className="flab">Method</label>
+                    <label className="flab">Method<span className="req">*</span></label>
                     <select className="fsel" value={abMethod} onChange={(e) => setAbMethod(e.target.value)}>
                       {methods.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="flab">Call type</label>
+                    <label className="flab">Call type<span className="req">*</span></label>
                     <select className="fsel" value={abCallType} onChange={(e) => setAbCallType(e.target.value)}>
                       {callTypes.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>

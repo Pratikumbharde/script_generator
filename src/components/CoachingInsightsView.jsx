@@ -632,7 +632,7 @@ export default function CoachingInsightsView() {
             {analyzeTab === "manual" && (
               <>
                 <div className="frow" style={{ marginBottom: 16 }}>
-                  <label className="flab">Session type</label>
+                  <label className="flab">Session type<span className="req">*</span></label>
                   <div className="pill-row">
                     {[
                       { id: "call", label: "Live Call" },
@@ -650,7 +650,7 @@ export default function CoachingInsightsView() {
                   </div>
                 </div>
                 <div style={{ marginBottom: 18 }}>
-                  <label className="flab">Transcript</label>
+                  <label className="flab">Transcript<span className="req">*</span></label>
                   <LimitedTextarea
                     className="finp"
                     style={{ minHeight: 280, resize: "vertical", width: "100%", fontSize: 14, lineHeight: 1.6 }}

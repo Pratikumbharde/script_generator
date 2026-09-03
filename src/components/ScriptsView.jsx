@@ -24,6 +24,8 @@ const COLUMNS_DEF = [
   { key: "updated", label: "Last updated", default: true, sortable: true, width: 110 },
 ];
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
 const OUTCOMES = [
   { id: "won", label: "Won", color: "ok" },
   { id: "lost", label: "Lost", color: "bad" },
@@ -115,7 +117,9 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const dropdownPos = useDropdownPos(dropdownBtnRef, !!activeDropdown);
   useOutsideClick(dropdownRef, () => setActiveDropdown(null));
 
-  const pageSize = filters.view === "cards" ? 12 : 20;
+  const [pageSize, setPageSize] = useState(() => {
+    try { const v = parseInt(localStorage.getItem("ps_page_size"), 10); return PAGE_SIZE_OPTIONS.includes(v) ? v : 20; } catch { return 20; }
+  });
   const [page, setPage] = useState(1);
 
   const load = async () => {
@@ -403,6 +407,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         <th style={{ width: 40, paddingLeft: 14 }}>
           <span className={`ck ${allFilteredSelected ? "on" : ""}`} onClick={toggleAll}>{allFilteredSelected ? "✓" : ""}</span>
         </th>
+        <th style={{ width: 48, textAlign: "center" }}>#</th>
         {COLUMNS_DEF.filter((c) => visibleCols.has(c.key)).map((c) => (
           <th key={c.key} className={c.sortable ? `sort-${sortDirFor(c.key)}` : ""} onClick={() => c.sortable && handleSort(c.key)}>
             {c.label} {c.sortable && <SortIcon dir={sortDirFor(c.key)} />}
@@ -413,11 +418,12 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     </thead>
   );
 
-  const renderTableRow = (r) => {
+  const renderTableRow = (r, idx) => {
     const m = r.meta;
     const prodExists = products.some((p) => p.id === m.productId);
     const isSel = selected.has(r.key);
     const missing = prodExists ? missingLangsFor(m) : [];
+    const srNo = (page - 1) * pageSize + idx + 1;
     const updated = r.savedAt > 0 ? new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
     const outcomeMeta = OUTCOMES.find((o) => o.id === (r.outcome || "pending")) || OUTCOMES[3];
     const scriptId = r.meta?.scriptId || r.meta?.id;
@@ -441,6 +447,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
             <span className={`ck ${isSel ? "on" : ""}`} onClick={() => toggleSel(r.key)}>{isSel ? "✓" : ""}</span>
           </span>
         </td>
+        <td style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, fontWeight: 500 }}>{srNo}</td>
         {visibleCols.has("script") && (
           <td>
             <div className="dt-script-name">{productName(m)}</div>
@@ -534,9 +541,9 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
     <table className="dt-table">
       {renderTableHeader()}
       <tbody>
-        {paginated.map(renderTableRow)}
+        {paginated.map((r, i) => renderTableRow(r, i))}
         {filtered.length === 0 && (
-          <tr><td colSpan={visibleCols.size + 2} className="dt-empty-cell">
+          <tr><td colSpan={visibleCols.size + 3} className="dt-empty-cell">
             <div className="ds-empty-state">
               <div className="icon"><Search size={24} /></div>
               <h3>No scripts match your filters</h3>
@@ -556,16 +563,18 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
 
   const renderCards = () => (
     <div className="ps-grid">
-      {paginated.map((r) => {
+      {paginated.map((r, i) => {
         const m = r.meta;
         const prodExists = products.some((p) => p.id === m.productId);
         const isSel = selected.has(r.key);
         const missing = prodExists ? missingLangsFor(m) : [];
         const updated = r.savedAt > 0 ? new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
+        const srNo = (page - 1) * pageSize + i + 1;
         return (
           <div key={r.key} className="pcard" style={{ borderColor: isSel ? "var(--accent)" : undefined, background: isSel ? "var(--accent-bg)" : undefined }} onClick={() => prodExists && onOpen(r)}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
               <span className={`ck ${isSel ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleSel(r.key); }}>{isSel ? "✓" : ""}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--faint)", minWidth: 20 }}>#{srNo}</span>
               <span className="cat">{productName(m)}</span>
             </div>
             <div className="nm" style={{ fontSize: 16 }}>{nameOf(METHODS, m.method)} · {nameOf(CALL_TYPES, m.callType)} · {m.duration}m</div>
@@ -609,17 +618,46 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   );
 
   const renderPagination = () => {
-    if (filtered.length <= pageSize) return null;
+    if (filtered.length === 0) return null;
     const start = (page - 1) * pageSize + 1;
     const end = Math.min(page * pageSize, filtered.length);
+
+    // Build page number buttons (show at most 7, with ellipsis)
+    const pageButtons = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pageButtons.push(i);
+    } else {
+      pageButtons.push(1);
+      let startPage = Math.max(2, page - 2);
+      let endPage = Math.min(totalPages - 1, page + 2);
+      if (page <= 3) { startPage = 2; endPage = 5; }
+      if (page >= totalPages - 2) { startPage = totalPages - 4; endPage = totalPages - 1; }
+      if (startPage > 2) pageButtons.push("...");
+      for (let i = startPage; i <= endPage; i++) pageButtons.push(i);
+      if (endPage < totalPages - 1) pageButtons.push("...");
+      pageButtons.push(totalPages);
+    }
+
     return (
       <div className="ds-pagination">
-        <span className="ds-pagination-info">Showing {start}–{end} of {filtered.length}</span>
+        <div className="ds-pagination-left">
+          <span className="ds-pagination-info">{start}–{end} of {filtered.length}</span>
+          <div className="ds-pagination-rows">
+            <label>Rows per page:</label>
+            <select className="ds-pagination-select" value={pageSize} onChange={(e) => { const v = Number(e.target.value); setPageSize(v); localStorage.setItem("ps_page_size", v); setPage(1); }}>
+              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+        </div>
         <div className="ds-pagination-actions">
           <button className="ds-btn-ico" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
             <ChevronLeft size={16} />
           </button>
-          <span className="ds-pagination-pages">Page {page} of {totalPages}</span>
+          {pageButtons.map((p, i) =>
+            p === "..."
+              ? <span key={`e${i}`} className="ds-pagination-ellipsis">…</span>
+              : <button key={p} className={`ds-pagination-num ${p === page ? "on" : ""}`} onClick={() => setPage(p)}>{p}</button>
+          )}
           <button className="ds-btn-ico" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
             <ChevronRight size={16} />
           </button>

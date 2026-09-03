@@ -145,7 +145,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
             </div>
             <div className="frow two" style={{ marginBottom: 12 }}>
               <div>
-                <label className="flab">Email address</label>
+                <label className="flab">Email address<span className="req">*</span></label>
                 <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
               </div>
               <div>
@@ -154,7 +154,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
-              <label className="flab">Role</label>
+              <label className="flab">Role<span className="req">*</span></label>
               <select className="fsel" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
                 <option value="member">Member — Can view assigned scripts</option>
                 <option value="manager">Manager — Can generate scripts & manage team</option>
@@ -327,7 +327,7 @@ function WorkspaceSettings({ workspace }) {
     <>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 18 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <label className="flab">Workspace name</label>
+          <label className="flab">Workspace name<span className="req">*</span></label>
           <LimitedInput className="finp" maxLength={200} value={wsName} onChange={(e) => setWsName(e.target.value)} placeholder="e.g. Acme Sales" />
         </div>
         <button className="ps-btn pri" disabled={!wsName.trim() || wsName === workspace?.name} onClick={saveName}>Save</button>

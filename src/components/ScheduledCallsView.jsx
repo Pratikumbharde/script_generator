@@ -244,34 +244,34 @@ export default function ScheduledCallsView({ products }) {
               <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>{editing ? "Edit scheduled call" : "Schedule a call"}</div>
               <div className="schedule-form">
                 <div className="frow">
-                  <label className="flab">Product</label>
+                  <label className="flab">Product<span className="req">*</span></label>
                   <select className="fsel" value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })}>
                     <option value="">Select…</option>
                     {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div className="frow">
-                  <label className="flab">Prospect name *</label>
+                  <label className="flab">Prospect name<span className="req">*</span></label>
                   <LimitedInput className="finp" maxLength={200} value={form.prospect_name} onChange={(e) => setForm({ ...form, prospect_name: e.target.value })} placeholder="e.g. Rahul Sharma" />
                 </div>
                 <div className="frow">
-                  <label className="flab">Company</label>
+                  <label className="flab">Company<span className="req">*</span></label>
                   <LimitedInput className="finp" maxLength={200} value={form.prospect_company} onChange={(e) => setForm({ ...form, prospect_company: e.target.value })} placeholder="e.g. Acme Corp" />
                 </div>
                 <div className="frow">
-                  <label className="flab">Email</label>
+                  <label className="flab">Email<span className="req">*</span></label>
                   <LimitedInput className="finp" maxLength={300} value={form.prospect_email} onChange={(e) => setForm({ ...form, prospect_email: e.target.value })} placeholder="rahul@acme.com" />
                 </div>
                 <div className="frow">
-                  <label className="flab">Date & time *</label>
+                  <label className="flab">Date &amp; time<span className="req">*</span></label>
                   <input className="finp" type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
                 </div>
                 <div className="frow">
-                  <label className="flab">Duration (min)</label>
+                  <label className="flab">Duration (min)<span className="req">*</span></label>
                   <input className="finp" type="number" min={5} max={120} value={form.duration} onChange={(e) => setForm({ ...form, duration: Number(e.target.value) })} />
                 </div>
                 <div className="frow">
-                  <label className="flab">Timezone</label>
+                  <label className="flab">Timezone<span className="req">*</span></label>
                   <LimitedInput className="finp" maxLength={100} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
                 </div>
                 <div className="frow" style={{ gridColumn: "1 / -1" }}>

@@ -342,7 +342,7 @@ Evaluate.`;
             <div>
               {/* Product */}
               <div className="frow">
-                <label className="flab">Product</label>
+                <label className="flab">Product<span className="req">*</span></label>
                 <select
                   className="fsel"
                   value={selectedProduct?.id || ""}
@@ -390,7 +390,7 @@ Evaluate.`;
 
               {/* Call Type */}
               <div className="frow">
-                <label className="flab">Call Type</label>
+                <label className="flab">Call Type<span className="req">*</span></label>
                 <select className="fsel" value={callType} onChange={(e) => setCallType(e.target.value)}>
                   {CALL_TYPES.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -401,7 +401,7 @@ Evaluate.`;
 
               {/* Method */}
               <div className="frow">
-                <label className="flab">Sales Method</label>
+                <label className="flab">Sales Method<span className="req">*</span></label>
                 <select className="fsel" value={method} onChange={(e) => setMethod(e.target.value)}>
                   {METHODS.map((m) => (
                     <option key={m.id} value={m.id}>{m.name}</option>
@@ -448,7 +448,7 @@ Evaluate.`;
 
               {/* Difficulty */}
               <div className="frow">
-                <label className="flab">Difficulty</label>
+                <label className="flab">Difficulty<span className="req">*</span></label>
                 <div className="rp-diff-grid">
                   {DIFFICULTY_LEVELS.map((d) => (
                     <div
@@ -466,7 +466,7 @@ Evaluate.`;
 
               {/* Language */}
               <div className="frow">
-                <label className="flab">Language</label>
+                <label className="flab">Language<span className="req">*</span></label>
                 <select className="fsel" value={language} onChange={(e) => setLanguage(e.target.value)}>
                   {LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>{l.name} {l.native ? `— ${l.native}` : ""}</option>

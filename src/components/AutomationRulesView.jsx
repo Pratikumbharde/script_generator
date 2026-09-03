@@ -132,19 +132,19 @@ export default function AutomationRulesView() {
             <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
               <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>Add Automation Rule</div>
               <div className="frow">
-                <label className="flab">When this happens</label>
+                <label className="flab">When this happens<span className="req">*</span></label>
                 <select className="fsel" value={form.trigger_event} onChange={(e) => setForm({ ...form, trigger_event: e.target.value })}>
                   {TRIGGERS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
               </div>
               <div className="frow">
-                <label className="flab">Then do this</label>
+                <label className="flab">Then do this<span className="req">*</span></label>
                 <select className="fsel" value={form.action_type} onChange={(e) => setForm({ ...form, action_type: e.target.value })}>
                   {ACTIONS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
                 </select>
               </div>
               <div className="frow">
-                <label className="flab">Target URL / Email / Channel</label>
+                <label className="flab">Target URL / Email / Channel<span className="req">*</span></label>
                 <LimitedInput className="finp" maxLength={500} value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} placeholder="https://hooks.zapier.com/… or email@company.com" />
               </div>
               <div className="frow">
