@@ -67,7 +67,11 @@ function aiReadiness(p) {
   return { score, missing, fields };
 }
 
-/* Status: Draft / Ready / Active */
+/* Status: Auto-computed based on profile completeness
+   Draft:     Nothing filled in yet (or only minor fields)
+   Ready:     At least one key field has content (one-liner, description, or ICP)
+   Active:    All key fields are complete (one-liner, description, ICP, pain points, differentiators)
+   Archived:  Manually archived by user */
 function statusOf(p, archived) {
   if (archived) return "archived";
   const has = (k) => !!(p[k] && String(p[k]).trim().length > 5);
@@ -458,6 +462,9 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {/* Filter panel */}
         {showFilters && products.length > 0 && (
           <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
+              <strong>Draft</strong> — no key fields filled &nbsp;·&nbsp; <strong>Ready</strong> — some key fields filled &nbsp;·&nbsp; <strong>Active</strong> — all key fields complete (one-liner, description, ICP, pain points, differentiators) &nbsp;·&nbsp; <strong>Archived</strong> — manually archived
+            </div>
             <div className="dt-filter-group">
               <label>Status</label>
               <select className="fsel" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
