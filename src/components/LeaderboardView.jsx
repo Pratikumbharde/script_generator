@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Trophy } from 'lucide-react'
 import { getLeaderboard, getRepTrends } from '../api/client.js'
 
 export default function LeaderboardView() {
@@ -48,7 +49,7 @@ export default function LeaderboardView() {
   return (
     <div className="ps-container">
       <div className="ps-header">
-        <h1>🏆 Team Leaderboard</h1>
+        <h1><Trophy size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Team Leaderboard</h1>
         <p className="ps-muted">Compare rep performance, benchmark vs team average, and spot trends.</p>
       </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Zap } from "lucide-react";
 import { listAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule } from "../api/client.js";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
@@ -79,7 +80,7 @@ export default function AutomationRulesView() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">P6.2</div>
-          <div className="ps-title">Automation Rules</div>
+          <div className="ps-title"><Zap size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Automation Rules</div>
           <div className="ps-sub">Zapier-style triggers. When X happens, send a webhook, email, or Slack message.</div>
         </div>
         <button className="ps-btn pri" onClick={() => setShowForm(true)}>+ Add rule</button>

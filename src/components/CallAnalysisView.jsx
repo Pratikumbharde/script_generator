@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, FileAudio, History, Loader2, PenLine, Search, X } from 'lucide-react'
+import { ArrowLeft, FileAudio, History, Loader2, PenLine, Search, X, AudioWaveform } from 'lucide-react'
 import AudioUpload from './shared/AudioUpload.jsx'
 import DiarizedTranscript from './shared/DiarizedTranscript.jsx'
 import AnalysisReport from './shared/AnalysisReport.jsx'
@@ -159,7 +159,7 @@ export default function CallAnalysisView({ products = [], initialScriptId = null
       <div className="ca-top">
         <div>
           <div className="ps-eyebrow">Intelligence</div>
-          <div className="ps-title">Call Analysis</div>
+          <div className="ps-title"><AudioWaveform size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Analysis</div>
           <div className="ps-sub">Upload a recording, type call details, or record live — get AI-powered feedback on script adherence, missed opportunities, and coaching tips.</div>
         </div>
         <div className="ca-top-actions">

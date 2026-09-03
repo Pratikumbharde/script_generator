@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { LayoutGrid } from "lucide-react";
 import { listComponents, createComponent, deleteComponent } from "../api/client.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
 import LimitedInput from './shared/LimitedInput.jsx'
@@ -62,7 +63,7 @@ export default function ComponentLibrary() {
 
   if (components === null) return (
     <>
-      <div className="ps-top"><div><div className="ps-eyebrow">Library</div><div className="ps-title">Script Components</div></div></div>
+      <div className="ps-top"><div><div className="ps-eyebrow">Library</div><div className="ps-title"><LayoutGrid size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Script Components</div></div></div>
       <div className="ps-body"><RowSkeleton count={5} /></div>
     </>
   );
@@ -72,7 +73,7 @@ export default function ComponentLibrary() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Library</div>
-          <div className="ps-title">Script Components</div>
+          <div className="ps-title"><LayoutGrid size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Script Components</div>
           <div className="ps-sub">Save your best openings, closes, objection handlers, and discovery questions. Reuse them across scripts.</div>
         </div>
         {!creating && <button className="ps-btn pri" onClick={() => setCreating(true)}>＋ New component</button>}

@@ -154,7 +154,7 @@ export default function VoiceDNA() {
   if (docs === null) {
     return (
       <>
-        <div className="ps-top"><div><div className="ps-eyebrow">Voice DNA</div><div className="ps-title">Company Voice</div></div></div>
+        <div className="ps-top"><div><div className="ps-eyebrow">Voice DNA</div><div className="ps-title"><Mic size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Company Voice</div></div></div>
         <div className="ps-body"><RowSkeleton count={5} /></div>
       </>
     )
@@ -165,7 +165,7 @@ export default function VoiceDNA() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Voice DNA</div>
-          <div className="ps-title">Company Voice</div>
+          <div className="ps-title"><Mic size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Company Voice</div>
           <div className="ps-sub">Add company materials and analyze them to create a Voice DNA profile. The profile shapes how scripts sound when generating them.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

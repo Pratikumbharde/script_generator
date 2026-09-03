@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Store } from "lucide-react";
 import { listMarketplaceTemplates, getMarketplaceTemplate, downloadMarketplaceTemplate } from "../api/client.js";
 
 const CATEGORIES = [
@@ -62,7 +63,7 @@ export default function MarketplaceView() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">P3.6</div>
-          <div className="ps-title">Marketplace</div>
+          <div className="ps-title"><Store size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Marketplace</div>
           <div className="ps-sub">Pre-built script templates curated from top-performing sales methodologies.</div>
         </div>
       </div>

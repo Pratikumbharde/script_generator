@@ -687,7 +687,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
       <div className="ps-top">
         <div style={{ flex: 1 }}>
           <div className="ps-eyebrow">Workspace</div>
-          <div className="ps-title">Saved scripts</div>
+          <div className="ps-title"><FileText size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Saved scripts</div>
           <div className="ps-sub">Every script you've generated, in one place. Filter, compare, and manage in bulk.</div>
         </div>
       </div>

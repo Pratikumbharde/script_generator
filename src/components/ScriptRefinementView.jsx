@@ -23,6 +23,7 @@ import {
   Save,
   Clock,
   BarChart3,
+  PenTool,
 } from "lucide-react";
 
 /* ============================================================
@@ -363,7 +364,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
         <div className="ps-top">
           <div style={{ flex: 1 }}>
             <div className="ps-eyebrow">Optimize</div>
-            <div className="ps-title">AI Script Refinement</div>
+            <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Script Refinement</div>
           </div>
         </div>
         <div className="ds-template-f" style={{ padding: "48px 34px", maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
@@ -383,7 +384,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
       <div className="ps-top">
         <div style={{ flex: 1 }}>
           <div className="ps-eyebrow">Optimize</div>
-          <div className="ps-title">AI Script Refinement</div>
+          <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Script Refinement</div>
         </div>
         {phase !== "select" && (
           <button className="ds-btn-sec" onClick={() => { setPhase("select"); setSelectedScript(null); }}>

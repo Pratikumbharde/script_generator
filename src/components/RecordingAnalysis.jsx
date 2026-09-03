@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { AudioWaveform } from "lucide-react";
 import { S, nameOf, parseScriptKey, callModel } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES } from "../data/constants.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
@@ -110,7 +111,7 @@ Analyze the call against the script.`;
 
   if (scripts === null) return (
     <>
-      <div className="ps-top"><div><div className="ps-eyebrow">Analysis</div><div className="ps-title">Call Recording Analysis</div></div></div>
+      <div className="ps-top"><div><div className="ps-eyebrow">Analysis</div><div className="ps-title"><AudioWaveform size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Recording Analysis</div></div></div>
       <div className="ps-body"><RowSkeleton count={5} /></div>
     </>
   );
@@ -120,7 +121,7 @@ Analyze the call against the script.`;
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Analysis</div>
-          <div className="ps-title">Call Recording Analysis</div>
+          <div className="ps-title"><AudioWaveform size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Recording Analysis</div>
           <div className="ps-sub">Upload or describe a call. AI compares it against the saved script and scores adherence, coverage, and missed opportunities.</div>
         </div>
       </div>

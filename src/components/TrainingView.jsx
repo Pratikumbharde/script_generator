@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { BookOpen } from "lucide-react";
 import { METHODS, CALL_TYPES, METHOD_TRAINING, CALLTYPE_TRAINING, COMPARISONS, TONE_COLOR } from "../data/constants.js";
 
 /* ---------- Training ---------- */
@@ -13,7 +14,7 @@ export default function TrainingView() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">🎓 Training</div>
-          <div className="ps-title">Learn the craft, not just the tool</div>
+          <div className="ps-title"><BookOpen size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Learn the craft, not just the tool</div>
           <div className="ps-sub">Deep-dives on every methodology and call type, plus comparison tables to pick the right approach for the customer in front of you.</div>
         </div>
       </div>

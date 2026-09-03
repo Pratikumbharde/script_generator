@@ -5,7 +5,7 @@ import {
   Search, LayoutGrid, List, Trash2, Pencil, X,
   CheckCircle2, Clock, Sparkles,
   MoreHorizontal, FileText, Copy, Archive, RotateCcw,
-  ArrowRight, Eye, SlidersHorizontal, ChevronLeft, ChevronRight
+  ArrowRight, Eye, SlidersHorizontal, ChevronLeft, ChevronRight, Boxes
 } from "lucide-react";
 
 /* ============================================================
@@ -421,7 +421,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Workspace</div>
-          <div className="ps-title">Products</div>
+          <div className="ps-title"><Boxes size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Products</div>
           <div className="ps-sub">{products.length} product{products.length === 1 ? "" : "s"} — configure profiles, generate scripts, and run live calls.</div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

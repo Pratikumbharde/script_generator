@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Theater } from "lucide-react";
 import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import { callModel, nameOf } from "../utils/helpers.js";
 import {
@@ -329,7 +330,7 @@ Evaluate.`;
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Practice</div>
-          <div className="ps-title">AI Role-play</div>
+          <div className="ps-title"><Theater size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Role-play</div>
           <div className="ps-sub">Practice real sales conversations with an AI buyer and get scored on how you sell.</div>
         </div>
       </div>

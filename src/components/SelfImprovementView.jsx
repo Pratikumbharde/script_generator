@@ -63,7 +63,7 @@ export default function SelfImprovementView() {
         <div className="si-top">
           <div>
             <div className="ps-eyebrow">Optimize</div>
-            <div className="ps-title">Self-Improvement</div>
+            <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Self-Improvement</div>
             <div className="ps-sub">Your scripts learn from every call outcome.</div>
           </div>
         </div>
@@ -81,7 +81,7 @@ export default function SelfImprovementView() {
       <div className="si-top">
         <div>
           <div className="ps-eyebrow">Optimize</div>
-          <div className="ps-title">Self-Improvement</div>
+          <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Self-Improvement</div>
           <div className="ps-sub">Your scripts learn from every call outcome. Track patterns, discover what works, and let AI improve future scripts.</div>
         </div>
         <button className="ps-btn ghost" onClick={handleRefresh} disabled={refreshing}>
