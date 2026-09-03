@@ -274,6 +274,7 @@ html[data-theme="dark"]{
 .ps-root[data-theme="dark"] .finp-toggle:hover{background:#334155}
 .ftext{resize:vertical;min-height:74px;line-height:1.5}
 .fhint{font-size:11.5px;color:var(--faint);margin-top:5px}
+.fchar{font-size:11px;color:var(--muted);margin-top:3px;text-align:right}
 .limited-field{width:100%;min-width:0}
 .limited-field textarea,.limited-field input{width:100%}
 .char-count{font-size:11px;color:var(--faint);text-align:right;margin-top:1px;transition:.12s;line-height:1}

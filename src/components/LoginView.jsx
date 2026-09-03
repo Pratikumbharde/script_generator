@@ -123,7 +123,7 @@ export default function LoginView() {
               required
               autoFocus
             />
-            {hasFieldError('email') && <div className="ferr">{formErrors.email}</div>}
+            {hasFieldError('email') ? <div className="ferr">{formErrors.email}</div> : email.length > 0 && <div className="fchar">{email.length}/{EMAIL_MAX}</div>}
           </div>
 
           <div className="frow">
@@ -143,8 +143,7 @@ export default function LoginView() {
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            {hasFieldError('password') && <div className="ferr">{formErrors.password}</div>}
-            {mode === 'register' && !hasFieldError('password') && <div className="fhint">At least 6 characters</div>}
+            {hasFieldError('password') ? <div className="ferr">{formErrors.password}</div> : password.length > 0 ? <div className="fchar">{password.length}/{PASSWORD_MAX}</div> : mode === 'register' && <div className="fhint">At least 6 characters</div>}
           </div>
 
           {mode === 'register' && (
@@ -159,7 +158,7 @@ export default function LoginView() {
                 placeholder="e.g. Acme Corp"
                 maxLength={COMPANY_MAX}
               />
-              {hasFieldError('company') && <div className="ferr">{formErrors.company}</div>}
+              {hasFieldError('company') ? <div className="ferr">{formErrors.company}</div> : company.length > 0 && <div className="fchar">{company.length}/{COMPANY_MAX}</div>}
             </div>
           )}
 
