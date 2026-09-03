@@ -5,7 +5,7 @@ import {
   Search, LayoutGrid, List, Trash2, Pencil, X,
   CheckCircle2, Clock, Sparkles,
   MoreHorizontal, FileText, Copy, Archive, RotateCcw,
-  ArrowRight, Eye, SlidersHorizontal, ChevronLeft, ChevronRight, Boxes
+  ArrowRight, Eye, SlidersHorizontal, ChevronLeft, ChevronRight, Boxes, Info
 } from "lucide-react";
 
 /* ============================================================
@@ -116,6 +116,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
 
   // Filters + pagination
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showStatusInfo, setShowStatusInfo] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = viewMode === "cards" ? 12 : 10;
@@ -474,12 +475,21 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {/* Filter panel */}
         {showFilters && products.length > 0 && (
           <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10, fontSize: 12, lineHeight: 1.4 }}>
-              <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span><span style={{ color: "var(--muted)" }}>All 5 key fields</span>
-              <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span><span style={{ color: "var(--muted)" }}>Some fields</span>
-              <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span><span style={{ color: "var(--muted)" }}>No fields</span>
-              <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span><span style={{ color: "var(--muted)" }}>Hidden</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+              <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span>
+              <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span>
+              <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span>
+              <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span>
+              <button className="ps-btn ghost sm" style={{ padding: "2px 6px", minHeight: 0, lineHeight: 1 }} onClick={() => setShowStatusInfo((v) => !v)}><Info size={13} /></button>
             </div>
+            {showStatusInfo && (
+              <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, marginBottom: 10, padding: "8px 12px", background: "var(--card)", borderRadius: 8, border: "1px solid var(--line)" }}>
+                <div><strong>Draft</strong> — no key fields filled</div>
+                <div><strong>Ready</strong> — some key fields filled</div>
+                <div><strong>Active</strong> — all key fields complete (one-liner, description, ICP, pain points, differentiators)</div>
+                <div><strong>Archived</strong> — manually archived</div>
+              </div>
+            )}
             <div className="dt-filter-group">
               <label>Status</label>
               <select className="fsel" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
