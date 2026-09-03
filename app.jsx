@@ -56,6 +56,15 @@ export default function PitchStudio() {
   }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | selfimprove | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap | voice
   // Persist current view so refresh stays on the same page
   useEffect(() => { localStorage.setItem('ps_view', view); }, [view]);
+
+  // Auto-refresh products & staff when navigating to views that depend on them
+  useEffect(() => {
+    const viewsNeedingFreshProducts = ['products', 'product', 'add', 'studio', 'scripts', 'schedule', 'practice', 'roleplay', 'battle', 'team'];
+    if (viewsNeedingFreshProducts.includes(view) && user) {
+      refreshProducts();
+      if (view === 'team') refreshStaff();
+    }
+  }, [view, user]);
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [active, setActive] = useState(null); // active product for studio
@@ -165,14 +174,14 @@ export default function PitchStudio() {
           )}
           {view === "product" && selectedProduct && (
             <ProductDetail product={selectedProduct}
-              onBack={() => { setSelectedProduct(null); setView("products"); }}
+              onBack={async () => { setSelectedProduct(null); await refreshProducts(); setView("products"); }}
               onOpenStudio={() => openStudio(selectedProduct)}
               onEdit={() => { setEditingProduct(selectedProduct); setView("add"); }}
               onDelete={async (p) => { await S.del(`pproduct:${p.id}`); setSelectedProduct(null); await refreshProducts(); setView("products"); }}
               onDuplicate={(p) => { setEditingProduct({ ...p, id: null, name: p.name + " (copy)" }); setView("add"); }} />
           )}
           {view === "add" && (
-            <ProductForm product={editingProduct} onCancel={() => { setEditingProduct(null); setView("products"); }} onSaved={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} />
+            <ProductForm product={editingProduct} onCancel={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} onSaved={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} />
           )}
           {view === "studio" && (
             <StudioView
