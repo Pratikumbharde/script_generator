@@ -89,7 +89,9 @@ const STATUS_META = {
 
 function fmtDate(ts) {
   if (!ts) return "";
-  const d = new Date(ts);
+  // SQLite CURRENT_TIMESTAMP is UTC but lacks the Z suffix — normalize it
+  const normalized = typeof ts === 'string' && !ts.endsWith('Z') && !ts.includes('+') ? ts + 'Z' : ts;
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return "";
   const now = new Date();
   const diffMs = now - d;
@@ -472,8 +474,14 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {/* Filter panel */}
         {showFilters && products.length > 0 && (
           <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
-              <strong>Draft</strong> — no key fields filled &nbsp;·&nbsp; <strong>Ready</strong> — some key fields filled &nbsp;·&nbsp; <strong>Active</strong> — all key fields complete (one-liner, description, ICP, pain points, differentiators) &nbsp;·&nbsp; <strong>Archived</strong> — manually archived
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, lineHeight: 1.6 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "center" }}>
+                <span><span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span> — all 5 key fields complete</span>
+                <span><span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span> — some key fields filled</span>
+                <span><span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span> — no key fields filled</span>
+                <span><span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span> — manually archived</span>
+              </div>
+              <div style={{ marginTop: 4, fontSize: 11, color: "var(--faint)" }}>Key fields: one-liner, description, ideal customer profile, pain points, differentiators</div>
             </div>
             <div className="dt-filter-group">
               <label>Status</label>
