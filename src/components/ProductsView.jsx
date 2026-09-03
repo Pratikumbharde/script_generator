@@ -474,14 +474,11 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         {/* Filter panel */}
         {showFilters && products.length > 0 && (
           <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, lineHeight: 1.6 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "center" }}>
-                <span><span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span> — all 5 key fields complete</span>
-                <span><span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span> — some key fields filled</span>
-                <span><span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span> — no key fields filled</span>
-                <span><span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span> — manually archived</span>
-              </div>
-              <div style={{ marginTop: 4, fontSize: 11, color: "var(--faint)" }}>Key fields: one-liner, description, ideal customer profile, pain points, differentiators</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10, fontSize: 12, lineHeight: 1.4 }}>
+              <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span><span style={{ color: "var(--muted)" }}>All 5 key fields</span>
+              <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span><span style={{ color: "var(--muted)" }}>Some fields</span>
+              <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span><span style={{ color: "var(--muted)" }}>No fields</span>
+              <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span><span style={{ color: "var(--muted)" }}>Hidden</span>
             </div>
             <div className="dt-filter-group">
               <label>Status</label>

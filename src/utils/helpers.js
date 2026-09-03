@@ -1,8 +1,8 @@
 import {
   getSettings, updateSettings,
-  listProducts, createProduct,
-  listStaff, createStaff,
-  listScripts, createScript, updateScript,
+  listProducts, createProduct, deleteProduct,
+  listStaff, createStaff, deleteStaff,
+  listScripts, createScript, updateScript, deleteScript,
 } from '../api/client.js'
 import {
   METHODS, CALL_TYPES, LANGUAGES, REGIONS, DELIVERY,
