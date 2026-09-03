@@ -1259,7 +1259,7 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
   if (common_objections !== undefined) { fields.push('common_objections = ?'); values.push(common_objections) }
   if (key_messages !== undefined) { fields.push('key_messages = ?'); values.push(key_messages) }
   if (visibility !== undefined) { fields.push('visibility = ?'); values.push(visibility) }
-  fields.push('updated_at = ?'); values.push(new Date().toISOString())
+  fields.push('updated_at = ?'); values.push(new Date().toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ''))
   values.push(id)
 
   db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values)
