@@ -46,12 +46,12 @@ export default function LoginView() {
 
         <form onSubmit={submit}>
           <div className="frow">
-            <label className="flab">Email</label>
+            <label className="flab">Email<span className="req">*</span></label>
             <input className="finp" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
           </div>
 
           <div className="frow">
-            <label className="flab">Password</label>
+            <label className="flab">Password<span className="req">*</span></label>
             <div className="finp-wrap">
               <input className="finp" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
               <button type="button" className="finp-toggle" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>

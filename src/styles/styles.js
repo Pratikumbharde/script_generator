@@ -281,7 +281,7 @@ html[data-theme="dark"]{
 .char-count.over{color:var(--aggressive)}
 
 /* voice recorder */
-.vr-container{display:inline-flex;flex-direction:column;gap:4px}
+.vr-container{display:inline-flex;flex-direction:column;gap:4px;margin-left:6px}
 .vr-row{display:flex;align-items:center;gap:8px}
 .vr-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:2px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;transition:.15s}
 .vr-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -1522,7 +1522,7 @@ html[data-theme="dark"]{
 .pf-section-count.done{background:#E6F6EF;color:var(--ok)}
 
 /* Field importance */
-.flab .req{color:var(--aggressive);font-weight:700;margin-left:2px}
+.flab .req{color:var(--aggressive);font-weight:700;margin-left:0}
 .flab .rec{color:var(--amber);font-weight:600;margin-left:4px;font-size:11px}
 .flab .adv{color:var(--faint);font-weight:500;margin-left:4px;font-size:11px}
 .pf-field-example{font-size:11.5px;color:var(--faint);margin-top:4px;line-height:1.45}
