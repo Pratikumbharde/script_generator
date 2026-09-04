@@ -472,30 +472,24 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
           </div>
         )}
 
-        {/* Filter panel */}
+        {/* Filter panel — one line: badges + info + dropdown + actions */}
         {showFilters && products.length > 0 && (
-          <div className="dt-filter-panel" style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span>
-              <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span>
-              <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span>
-              <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span>
-              <button className="ps-btn ghost sm" style={{ padding: "2px 6px", minHeight: 0, lineHeight: 1, marginLeft: 2 }} title="Status descriptions" onClick={() => setShowStatusInfo(true)}><Info size={14} /></button>
-            </div>
-            <div className="dt-filter-group">
-              <label>Status</label>
-              <select className="fsel" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-                <option value="all">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="ready">Ready</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div className="dt-filter-actions">
-              <button className="ps-btn ghost sm" onClick={() => { setStatusFilter("all"); setPage(1); }}><X size={14} /> Clear</button>
-              <button className="ps-btn pri sm" onClick={() => setShowFilters(false)}>Done</button>
-            </div>
+          <div className="dt-filter-panel" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <span className="ds-status ok" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Active</span>
+            <span className="ds-status accent" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Ready</span>
+            <span className="ds-status warn" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Draft</span>
+            <span className="ds-status neu" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4 }}><span className="ds-status-dot" />Archived</span>
+            <button className="ps-btn ghost sm" style={{ padding: "2px 6px", minHeight: 0, lineHeight: 1 }} title="Status descriptions" onClick={() => setShowStatusInfo(true)}><Info size={14} /></button>
+            <div style={{ flex: 1 }} />
+            <select className="fsel" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={{ minWidth: 130 }}>
+              <option value="all">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="ready">Ready</option>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
+            </select>
+            <button className="ps-btn ghost sm" onClick={() => { setStatusFilter("all"); setPage(1); }}><X size={14} /> Clear</button>
+            <button className="ps-btn pri sm" onClick={() => setShowFilters(false)}>Done</button>
           </div>
         )}
 
