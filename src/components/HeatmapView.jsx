@@ -959,9 +959,12 @@ export default function ConversationIntelligenceView() {
   /* ── Main render ── */
   return (
     <div className="ps-container">
-      <div className="ps-header">
-        <h1><Activity size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Conversation Intelligence</h1>
-        <p className="ps-muted">Discover which phrases and approaches correlate with wins and losses.</p>
+      <div className="ps-top">
+        <div>
+          <div className="ps-eyebrow">Intelligence</div>
+          <div className="ps-title"><Activity size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Conversation Intelligence</div>
+          <div className="ps-sub">Discover which phrases and approaches correlate with wins and losses.</div>
+        </div>
       </div>
 
       {/* Global error */}

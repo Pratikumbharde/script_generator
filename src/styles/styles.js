@@ -328,10 +328,8 @@ html[data-theme="dark"]{
 /* ============================================================
    Call Analysis (ca-)
    ============================================================ */
-.ca-view{max-width:900px;margin:0 auto}
-.ca-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:24px 34px 0}
 .ca-top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.ca-step{padding:0 34px;margin-top:20px}
+.ca-step{margin-top:20px}
 .ca-step-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
 .ca-step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';font-weight:700;font-size:13px;flex:0 0 auto}
 .ca-step-title{font-family:'Space Grotesk';font-weight:700;font-size:18px;color:var(--ink)}
@@ -430,7 +428,7 @@ html[data-theme="dark"]{
 .ca-error{padding:12px 16px;background:#FEE2E2;color:#DC2626;border-radius:10px;font-size:14px;margin:12px 0}
 
 /* History panel */
-.ca-history-panel{margin:0 34px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;max-height:300px;overflow-y:auto}
+.ca-history-panel{margin:0 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;max-height:300px;overflow-y:auto}
 .ca-history-header{padding:10px 14px;font-family:'Space Grotesk';font-weight:700;font-size:14px;border-bottom:1px solid var(--line-soft);background:var(--surface)}
 .ca-history-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line-soft);cursor:pointer;transition:.1s;width:100%;text-align:left;background:none;border-left:none;border-right:none;border-top:none}
 .ca-history-item:hover{background:var(--accent-bg)}

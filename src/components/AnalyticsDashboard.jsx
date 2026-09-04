@@ -120,9 +120,12 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="ps-container">
-      <div className="ps-header">
-        <h1><BarChart3 size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Analytics</h1>
-        <p className="ps-muted">Understand what's happening across your sales conversations.</p>
+      <div className="ps-top">
+        <div>
+          <div className="ps-eyebrow">Insights</div>
+          <div className="ps-title"><BarChart3 size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Analytics</div>
+          <div className="ps-sub">Understand what's happening across your sales conversations.</div>
+        </div>
       </div>
 
       {loading ? (

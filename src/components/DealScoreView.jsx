@@ -818,9 +818,12 @@ export default function DealScoreView() {
   /* ── Main render ── */
   return (
     <div className="ps-container">
-      <div className="ps-header">
-        <h1><Star size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Deal Scores</h1>
-        <p className="ps-muted">AI-powered assessment of deal quality and likelihood to close.</p>
+      <div className="ps-top">
+        <div>
+          <div className="ps-eyebrow">Scoring</div>
+          <div className="ps-title"><Star size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Deal Scores</div>
+          <div className="ps-sub">AI-powered assessment of deal quality and likelihood to close.</div>
+        </div>
       </div>
 
       {view === "landing" && renderLanding()}
