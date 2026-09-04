@@ -30,8 +30,8 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       <>
         <div className="ps-top">
           <div>
-            <div className="ps-eyebrow">My Scripts</div>
-            <div className="ps-title">Assigned Scripts</div>
+            <div className="ps-eyebrow">Workspace</div>
+            <div className="ps-title"><Play size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Studio</div>
             <div className="ps-sub">Scripts that have been assigned to you by your team lead or manager.</div>
           </div>
         </div>
@@ -113,8 +113,8 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       <>
         <div className="ps-top">
           <div>
-            <div className="ps-eyebrow">Call Studio</div>
-            <div className="ps-title">Select a Product</div>
+            <div className="ps-eyebrow">Workspace</div>
+            <div className="ps-title"><Play size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Studio</div>
             <div className="ps-sub">Choose a product to generate scripts and start practicing.</div>
           </div>
         </div>
@@ -325,7 +325,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
         <div>
           <div className="crumb" onClick={onBack}>← Products</div>
           <div className="ps-eyebrow">Call Studio · {product.name}</div>
-          <div className="ps-title">Build your call</div>
+          <div className="ps-title"><Play size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Build your call</div>
           <div className="ps-sub">Set the method, audience, and language. Each unique combination is generated once, then saved.</div>
         </div>
       </div>

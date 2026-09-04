@@ -54,7 +54,18 @@ const STATUS_META = {
 
 function fmtDate(ts) {
   if (!ts) return "";
-  const d = new Date(ts);
+  const normalized = typeof ts === 'string' && !ts.endsWith('Z') && !ts.includes('+') ? ts + 'Z' : ts;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -187,7 +198,7 @@ export default function ProductDetail({ product, onBack, onOpenStudio, onEdit, o
             </span>
           </div>
           <div className="pd-sub">{product.one_liner || product.oneLiner || "No short description yet."}</div>
-          <div className="pd-meta-line">Updated {fmtDate(product.created_at || product.createdAt)}</div>
+          <div className="pd-meta-line">{product.updated_at ? `Updated ${fmtDate(product.updated_at)}` : `Created ${fmtDate(product.created_at || product.createdAt)}`}</div>
         </div>
         <div className="pd-actions">
           <button className="ds-btn-ter" onClick={onEdit}><Pencil size={14} /> Edit</button>

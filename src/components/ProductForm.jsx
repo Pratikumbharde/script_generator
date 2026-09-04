@@ -93,8 +93,8 @@ const STATUS_COLOR = {
 };
 
 export default function ProductForm({ product, onCancel, onSaved }) {
-  const isEdit = !!product;
-  const initial = isEdit
+  const isEdit = !!(product && product.id);
+  const initial = product
     ? {
         name: product.name || "",
         category: product.category || "",

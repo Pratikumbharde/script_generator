@@ -100,6 +100,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const [syncErr, setSyncErr] = useState("");
   const [confirmSync, setConfirmSync] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [copyToast, setCopyToast] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [showCols, setShowCols] = useState(false);
@@ -349,10 +350,18 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const saveCampaign = async (scriptId, value) => {
     setEditingCampaign(null);
     try {
-      await updateScript(scriptId, { campaign: value || null });
-      // Update local state
+      if (scriptId) {
+        await updateScript(scriptId, { campaign: value || null });
+      }
+      // Update local state regardless (works for both server and local scripts)
       setRows((prev) => prev ? prev.map((r) => {
-        if ((r.meta?.scriptId || r.meta?.id) === scriptId || r.key === scriptId) return { ...r, campaign: value || null };
+        if ((r.meta?.scriptId || r.meta?.id) === scriptId || r.key === scriptId) {
+          // Also persist locally if no server ID
+          if (!scriptId && r.key) {
+            S.set(r.key, { data: r.meta, savedAt: r.savedAt, meta: r.meta, outcome: r.outcome, sort_order: r.sort_order, campaign: value || null });
+          }
+          return { ...r, campaign: value || null };
+        }
         return r;
       }) : prev);
     } catch { /* silent */ }
@@ -407,13 +416,13 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
         <th style={{ width: 40, paddingLeft: 14 }}>
           <span className={`ck ${allFilteredSelected ? "on" : ""}`} onClick={toggleAll}>{allFilteredSelected ? "✓" : ""}</span>
         </th>
-        <th style={{ width: 48, textAlign: "center" }}>#</th>
+        <th style={{ width: 48, textAlign: "center" }}>Sr. No.</th>
         {COLUMNS_DEF.filter((c) => visibleCols.has(c.key)).map((c) => (
           <th key={c.key} className={c.sortable ? `sort-${sortDirFor(c.key)}` : ""} onClick={() => c.sortable && handleSort(c.key)}>
             {c.label} {c.sortable && <SortIcon dir={sortDirFor(c.key)} />}
           </th>
         ))}
-        <th style={{ width: 50 }} />
+        <th style={{ width: 50 }}>Actions</th>
       </tr>
     </thead>
   );
@@ -511,6 +520,8 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                       e.stopPropagation();
                       const text = `${productName(m)} | ${nameOf(METHODS, m.method)} | ${nameOf(CALL_TYPES, m.callType)} | ${m.duration}m | ${nameOf(LANGUAGES, m.language)} | Outcome: ${r.outcome || "pending"} | Updated: ${updated}`;
                       navigator.clipboard.writeText(text);
+                      setCopyToast("Details copied!");
+                      setTimeout(() => setCopyToast(null), 2000);
                       setActiveDropdown(null);
                     }}>
                       <Copy size={14} /> Copy details
@@ -687,7 +698,7 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
       <div className="ps-top">
         <div style={{ flex: 1 }}>
           <div className="ps-eyebrow">Workspace</div>
-          <div className="ps-title"><FileText size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Saved scripts</div>
+          <div className="ps-title"><FileText size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Scripts</div>
           <div className="ps-sub">Every script you've generated, in one place. Filter, compare, and manage in bulk.</div>
         </div>
       </div>
@@ -830,6 +841,8 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                       return `${productName(m)} | ${nameOf(METHODS, m.method)} | ${nameOf(CALL_TYPES, m.callType)} | ${m.duration}m | ${nameOf(LANGUAGES, m.language)} | Outcome: ${r.outcome || "pending"}`;
                     }).join("\n");
                     navigator.clipboard.writeText(lines);
+                    setCopyToast("Details copied!");
+                    setTimeout(() => setCopyToast(null), 2000);
                   }}>
                     <Copy size={14} /> Export
                   </button>
@@ -965,6 +978,13 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
               <button className="ps-btn pri" onClick={() => confirmSync === "bulk" ? bulkSyncMissing() : syncMissingForRow(confirmSync.rec)}>Generate now</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Copy toast */}
+      {copyToast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--ink)", color: "#fff", padding: "10px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 200, boxShadow: "0 4px 12px rgba(0,0,0,.2)", animation: "fadeInUp .2s ease" }}>
+          ✓ {copyToast}
         </div>
       )}
     </>

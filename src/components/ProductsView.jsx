@@ -421,9 +421,16 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
         <td style={{ width: "8%", textAlign: "center" }}><b>{sc}</b></td>
         {/* Date — 14% */}
         <td style={{ width: "14%", color: "var(--muted)", fontSize: 12.5 }}>{p.updated_at ? `Upd ${fmtDate(p.updated_at)}` : fmtDate(p.created_at || p.createdAt)}</td>
-        {/* Actions — 6% */}
-        <td style={{ width: "6%" }} onClick={(e) => e.stopPropagation()}>
-          <ActionMenu p={p} alignRight={false} />
+        {/* Actions — 12% */}
+        <td style={{ width: "12%" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button className="ps-btn ghost sm" title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(p); }}><Pencil size={14} /></button>
+            {onDuplicate && (
+              <button className="ps-btn ghost sm" title="Duplicate" onClick={(e) => { e.stopPropagation(); onDuplicate(p); }}><Copy size={14} /></button>
+            )}
+            <button className="ps-btn ghost sm" style={{ color: "#B23237" }} title="Delete" onClick={(e) => { e.stopPropagation(); setConfirmDel(p); }}><Trash2 size={14} /></button>
+            <ActionMenu p={p} alignRight={false} />
+          </div>
         </td>
       </tr>
     );
@@ -542,7 +549,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
                       <th style={{ width: "20%" }}>AI Readiness</th>
                       <th style={{ width: "8%", textAlign: "center" }}>Scripts</th>
                       <th style={{ width: "14%" }}>Date</th>
-                      <th style={{ width: "6%" }} />
+                      <th style={{ width: "12%" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
