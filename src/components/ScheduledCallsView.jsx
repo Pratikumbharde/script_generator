@@ -151,7 +151,7 @@ export default function ScheduledCallsView({ products }) {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">P5.3</div>
-          <div className="ps-title"><CalendarDays size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Schedule</div>
+          <div className="ps-title"><CalendarDays size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Scheduled Calls</div>
           <div className="ps-sub">Plan calls, track outcomes, and stay prepared.</div>
         </div>
         <button className="ps-btn pri" onClick={openNew}>+ Schedule call</button>

@@ -123,7 +123,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Team</div>
-          <div className="ps-title"><Users size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Team Management</div>
+          <div className="ps-title"><Users size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Team</div>
           <div className="ps-sub">Manage your team members, their roles, and script assignments.</div>
         </div>
         {isAdmin && !showInvite && (

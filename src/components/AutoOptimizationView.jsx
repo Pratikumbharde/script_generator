@@ -179,17 +179,12 @@ export default function AutoOptimizationView({ scripts: scriptsProp = [] }) {
   return (
     <div className="ps-container">
       {/* Header */}
-      <div className="ps-header" style={{ marginBottom: 24 }}>
-        <h1 style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <TrendingUp size={24} style={{ color: "var(--accent)" }} />
-          AI Script Optimization
-        </h1>
-        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 2, lineHeight: 1.5, maxWidth: 640 }}>
-          Turn real sales conversations into continuously improving scripts.
-        </p>
-        <p style={{ fontSize: 13, color: "var(--faint)", lineHeight: 1.55, maxWidth: 640 }}>
-          AI analyzes your calls, win/loss patterns, objections and conversation performance to recommend improvements to your scripts.
-        </p>
+      <div className="ps-top" style={{ marginBottom: 24 }}>
+        <div>
+          <div className="ps-eyebrow">Optimize</div>
+          <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Optimization</div>
+          <div className="ps-sub">Automatically optimize your scripts based on call outcomes and AI feedback.</div>
+        </div>
       </div>
 
       {/* ── Optimization Overview ── */}

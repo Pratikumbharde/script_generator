@@ -364,7 +364,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
         <div className="ps-top">
           <div style={{ flex: 1 }}>
             <div className="ps-eyebrow">Optimize</div>
-            <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Script Refinement</div>
+            <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Script Refinement</div>
           </div>
         </div>
         <div className="ds-template-f" style={{ padding: "48px 34px", maxWidth: 520, margin: "0 auto", textAlign: "center" }}>

@@ -330,7 +330,7 @@ Evaluate.`;
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Practice</div>
-          <div className="ps-title"><Theater size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Role-play</div>
+          <div className="ps-title"><Theater size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Role-play</div>
           <div className="ps-sub">Practice real sales conversations with an AI buyer and get scored on how you sell.</div>
         </div>
       </div>
@@ -481,6 +481,7 @@ Evaluate.`;
               <button className="ps-btn pri" disabled={!selectedProduct || loading} onClick={generateScenario} style={{ width: "100%", justifyContent: "center", padding: "12px 20px" }}>
                 {loading ? <><span className="spinner" /> Generating scenario…</> : <><span style={{ fontSize: 18 }}>🎭</span> Start Role-play</>}
               </button>
+              {error && step === "setup" && <div className="err" style={{ marginTop: 12 }}>{error}</div>}
             </div>
           </div>
         )}
@@ -545,12 +546,14 @@ Evaluate.`;
               </button>
               <button className="ps-btn ghost" style={{ marginLeft: 10 }} onClick={() => setStep("setup")}>← Change setup</button>
             </div>
+            {error && step === "briefing" && <div className="err" style={{ marginTop: 12 }}>{error}</div>}
           </div>
         )}
 
         {/* ===== ACTIVE CHAT ===== */}
         {(step === "active" || step === "ended") && (
           <div className="rp-active-wrap">
+            {error && (step === "active" || step === "ended") && <div className="err" style={{ marginBottom: 12 }}>{error}</div>}
             {/* Chat area */}
             <div className="rp-chat-area">
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>

@@ -332,7 +332,7 @@ export default function CoachingInsightsView() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Insights</div>
-          <div className="ps-title"><Users size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Coaching</div>
+          <div className="ps-title"><Users size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Coaching</div>
           <div className="ps-sub">Personalized feedback from your calls, roleplays and practice.</div>
         </div>
         {mode === "overview" && (

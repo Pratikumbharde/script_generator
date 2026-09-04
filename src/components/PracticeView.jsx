@@ -628,7 +628,7 @@ Evaluate the response.`;
         <div className="ps-top">
           <div>
             <div className="ps-eyebrow">Practice</div>
-            <div className="ps-title"><Target size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Objection Drill</div>
+            <div className="ps-title"><Target size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Practice</div>
             <div className="ps-sub">Practice responding to buyer objections and get AI scoring.</div>
           </div>
         </div>
@@ -642,7 +642,7 @@ Evaluate the response.`;
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Practice</div>
-          <div className="ps-title"><Target size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Objection Drill</div>
+          <div className="ps-title"><Target size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Practice</div>
           <div className="ps-sub">Practice responding to buyer objections and get AI scoring.</div>
         </div>
         {stats.total > 0 && (

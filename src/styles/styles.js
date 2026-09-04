@@ -1076,7 +1076,7 @@ html[data-theme="dark"]{
 .tbl-sub{color:var(--muted);font-size:13.5px;line-height:1.5;margin-bottom:16px}
 .tbl-scroll{overflow-x:auto;margin:0 -6px;padding:0 6px}
 .ptbl{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px}
-.ptbl th{text-align:left;padding:11px 12px;font-weight:700;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.06em;border-bottom:1.5px solid var(--line);background:var(--bg);position:sticky;top:0}
+.ptbl th{text-align:left;padding:11px 12px;font-weight:700;color:var(--muted);text-transform:uppercase;font-size:12px;letter-spacing:.06em;border-bottom:1.5px solid var(--line);background:var(--bg);position:sticky;top:0;white-space:nowrap}
 .ptbl td{padding:12px;border-bottom:1px solid var(--line-soft);line-height:1.55;vertical-align:top}
 .ptbl tr:hover td{background:var(--card)}
 .ptbl td.q{font-style:italic;color:var(--accent-ink)}
@@ -1292,8 +1292,8 @@ html[data-theme="dark"]{
 .comp-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
 .comp-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .comp-type{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:20px}
-.comp-name{font-family:'Space Grotesk';font-weight:600;font-size:16px}
-.comp-content{font-size:14px;line-height:1.55;color:var(--muted);font-style:italic;padding:10px 12px;background:var(--surface);border-radius:9px;border-left:3px solid var(--accent)}
+.comp-name{font-family:'Space Grotesk';font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comp-content{font-size:14px;line-height:1.55;color:var(--muted);font-style:italic;padding:10px 12px;background:var(--surface);border-radius:9px;border-left:3px solid var(--accent);word-break:break-word;overflow-wrap:break-word;max-height:120px;overflow-y:auto}
 .comp-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 @media(max-width:560px){.comp-grid{grid-template-columns:1fr}}
 

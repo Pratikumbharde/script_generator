@@ -83,9 +83,12 @@ export default function ABTestingView({ scripts: scriptsProp = [], products = []
 
   return (
     <div className="ps-container">
-      <div className="ps-header">
-        <h1>🧪 A/B Script Testing</h1>
-        <p className="ps-muted">Create variant A/B scripts, track outcomes, and auto-promote winners.</p>
+      <div className="ps-top">
+        <div>
+          <div className="ps-eyebrow">Optimize</div>
+          <div className="ps-title">🧪 A/B Tests</div>
+          <div className="ps-sub">Create variant A/B scripts, track outcomes, and auto-promote winners.</div>
+        </div>
       </div>
 
       <div className="ps-card" style={{ marginBottom: 24 }}>

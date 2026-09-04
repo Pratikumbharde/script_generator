@@ -292,7 +292,7 @@ export default function CompetitorIntelView() {
         <div className="ps-top">
           <div>
             <div className="ps-eyebrow">Intelligence</div>
-            <div className="ps-title"><Eye size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Competitor Monitoring</div>
+            <div className="ps-title"><Eye size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Competitors</div>
             <div className="ps-sub">Loading competitive intelligence…</div>
           </div>
         </div>
@@ -312,7 +312,7 @@ export default function CompetitorIntelView() {
       <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Intelligence</div>
-          <div className="ps-title"><Eye size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Competitor Monitoring</div>
+          <div className="ps-title"><Eye size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Competitors</div>
           <div className="ps-sub">Track competitors, detect changes, and keep your sales team prepared.</div>
         </div>
         {mode === "overview" && (
