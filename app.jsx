@@ -237,7 +237,7 @@ export default function PitchStudio() {
             <CoachingInsightsView />
           )}
           {view === "analysis" && (
-            <CallAnalysisView products={products} initialScriptId={analysisScriptId} onBack={() => setView("products")} />
+            <CallAnalysisView products={products} initialScriptId={analysisScriptId} onBack={() => setView("scripts")} />
           )}
           {view === "abtesting" && (
             <ABTestingView products={products} />

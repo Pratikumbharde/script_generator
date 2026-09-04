@@ -121,7 +121,7 @@ export default function AnalyticsDashboard() {
   return (
     <div className="ps-container">
       <div className="ps-header">
-        <h1><BarChart3 size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />AI Call Analytics</h1>
+        <h1><BarChart3 size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Analytics</h1>
         <p className="ps-muted">Understand what's happening across your sales conversations.</p>
       </div>
 

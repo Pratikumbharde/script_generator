@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   listCompetitors,
   createCompetitor,
@@ -23,18 +23,19 @@ import {
   BookOpen,
   FileText,
   Trash2,
+  Pencil,
+  Eye,
   ChevronRight,
+  ChevronLeft,
   Activity,
   ExternalLink,
   Sparkles,
   BarChart3,
   Lightbulb,
-  Eye,
-  Search, LayoutGrid, List, SlidersHorizontal, ChevronLeft, MoreHorizontal,
+  Search, LayoutGrid, List, SlidersHorizontal,
 } from "lucide-react";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
-import { useOutsideClick, useDropdownPos } from './shared/DropdownHooks.js'
 
 /* ============================================================
    Competitor Monitoring — Command Center
@@ -93,12 +94,6 @@ export default function CompetitorIntelView() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [activeDropdown, setActiveDropdown] = useState(null);
-  const dropdownRef = useRef(null);
-  const dropdownBtnRef = useRef(null);
-  const dropdownPos = useDropdownPos(dropdownBtnRef, !!activeDropdown);
-
-  const closeDropdown = useCallback(() => setActiveDropdown(null), []);
-  useOutsideClick(dropdownRef, closeDropdown);
 
   /* Add competitor modal */
   const [showAdd, setShowAdd] = useState(false);
@@ -147,7 +142,10 @@ export default function CompetitorIntelView() {
   }
 
   async function handleAddCompetitor() {
-    if (!addForm.name.trim()) return;
+    if (!addForm.name.trim()) { setAddError("Competitor name is required."); return; }
+    if (!addForm.category.trim()) { setAddError("Category is required."); return; }
+    if (!addForm.website.trim()) { setAddError("Website URL is required."); return; }
+    if (addForm.website.trim() && !/^https?:\/\/.+\..+/.test(addForm.website.trim())) { setAddError("Please enter a valid URL starting with http:// or https://"); return; }
     setAdding(true);
     setAddError("");
     try {
@@ -170,8 +168,9 @@ export default function CompetitorIntelView() {
     }
   }
 
+  const [confirmDel, setConfirmDel] = useState(null);
+
   async function handleDeleteCompetitor(id) {
-    if (!confirm("Delete this competitor and all associated intel?")) return;
     try {
       await deleteCompetitor(id);
       setCompetitors((prev) => prev.filter((c) => c.id !== id));
@@ -179,8 +178,10 @@ export default function CompetitorIntelView() {
         setSelectedCompetitor(null);
         setMode("overview");
       }
+      setConfirmDel(null);
     } catch (e) {
       setError("Delete failed: " + (e.message || ""));
+      setConfirmDel(null);
     }
   }
 
@@ -266,6 +267,8 @@ export default function CompetitorIntelView() {
     if (threatFilter !== "all") {
       list = list.filter((c) => c.threat_level === threatFilter);
     }
+    // Sort newest first
+    list.sort((a, b) => (b.id || 0) - (a.id || 0));
     return list;
   }, [competitors, searchQuery, threatFilter]);
 
@@ -411,7 +414,7 @@ export default function CompetitorIntelView() {
                 <div className="dt-header">
                   <div className="dt-search">
                     <Search size={15} className="dt-search-icon" />
-                    <input placeholder="Search competitors…" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
+                    <input placeholder="Search competitors…" maxLength={200} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
                     {searchQuery && <button className="dt-search-clear" onClick={() => { setSearchQuery(""); setPage(1); }}><X size={13} /></button>}
                   </div>
                   <button className={`dt-filter-btn ${threatFilter !== "all" ? "on" : ""}`} onClick={() => setShowFilters((s) => !s)}>
@@ -478,11 +481,23 @@ export default function CompetitorIntelView() {
                           </div>
                           <div className="epc-actions">
                             <button className="epc-act-open" onClick={(e) => { e.stopPropagation(); setSelectedCompetitor(c); loadIntel(c.id); setMode("detail"); setDetailTab("overview"); }}><Eye size={13} /> Open</button>
-                            <button className="epc-act-del" onClick={(e) => { e.stopPropagation(); if (confirm("Delete this competitor and all associated intel?")) handleDeleteCompetitor(c.id); }}><Trash2 size={13} /></button>
+                            <button className="epc-act-del" onClick={(e) => { e.stopPropagation(); setConfirmDel(c); }}><Trash2 size={13} /></button>
                           </div>
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* No results */}
+                {filteredCompetitors.length === 0 && competitors.length > 0 && (
+                  <div className="ds-empty-state" style={{ marginTop: 20 }}>
+                    <div className="icon"><Search size={24} /></div>
+                    <h3>No matches</h3>
+                    <p>No competitors match "{searchQuery}". Try a different search term.</p>
+                    <div className="actions">
+                      <button className="ds-btn-ter" onClick={() => { setSearchQuery(""); setThreatFilter("all"); setPage(1); }}>Clear filters</button>
+                    </div>
                   </div>
                 )}
 
@@ -493,19 +508,22 @@ export default function CompetitorIntelView() {
                       <table className="dt-table">
                         <thead>
                           <tr>
-                            <th style={{ width: "34%" }}>Competitor</th>
-                            <th style={{ width: "14%" }}>Threat</th>
-                            <th style={{ width: "14%" }}>Category</th>
-                            <th style={{ width: "12%" }}>Intel</th>
-                            <th style={{ width: "14%" }}>Last updated</th>
-                            <th style={{ width: "8%" }} />
+                            <th style={{ width: "5%", textAlign: "center" }}>Sr. No.</th>
+                            <th style={{ width: "30%" }}>Competitor</th>
+                            <th style={{ width: "12%" }}>Threat</th>
+                            <th style={{ width: "12%" }}>Category</th>
+                            <th style={{ width: "10%" }}>Intel</th>
+                            <th style={{ width: "14%" }}>Created</th>
+                            <th style={{ width: "12%" }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {paginated.map((c) => {
+                          {paginated.map((c, idx) => {
                             const tm = THREAT_META[c.threat_level || "low"];
+                            const srNo = (page - 1) * pageSize + idx + 1;
                             return (
                               <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => { setSelectedCompetitor(c); loadIntel(c.id); setMode("detail"); setDetailTab("overview"); }}>
+                                <td style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, fontWeight: 500 }}>{srNo}</td>
                                 <td>
                                   <div className="dt-script-name">{c.name}</div>
                                   <div className="dt-script-meta">{c.product_name ? `vs ${c.product_name}` : "No product linked"}</div>
@@ -517,18 +535,11 @@ export default function CompetitorIntelView() {
                                 </td>
                                 <td style={{ fontSize: 13, color: "var(--muted)" }}>{c.category || "—"}</td>
                                 <td style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{c.intel_count || 0}</td>
-                                <td style={{ whiteSpace: "nowrap", fontSize: 12.5, color: "var(--muted)" }}>{c.last_intel_at ? timeAgo(c.last_intel_at) : "—"}</td>
+                                <td style={{ whiteSpace: "nowrap", fontSize: 12.5, color: "var(--muted)" }}>{c.created_at ? timeAgo(c.created_at) : "—"}</td>
                                 <td onClick={(e) => e.stopPropagation()}>
-                                  <div className="dt-actions" ref={activeDropdown === c.id ? dropdownRef : null}>
-                                    <button ref={activeDropdown === c.id ? dropdownBtnRef : null} className="dt-more-btn" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === c.id ? null : c.id); }}>
-                                      <MoreHorizontal size={16} />
-                                    </button>
-                                    {activeDropdown === c.id && dropdownPos && (
-                                      <div className="dt-dropdown" style={dropdownPos}>
-                                        <button className="dt-dropdown-item" onClick={() => { setSelectedCompetitor(c); loadIntel(c.id); setMode("detail"); setDetailTab("overview"); setActiveDropdown(null); }}><Eye size={14} /> Open</button>
-                                        <button className="dt-dropdown-item danger" onClick={() => { if (confirm("Delete this competitor and all associated intel?")) handleDeleteCompetitor(c.id); setActiveDropdown(null); }}><Trash2 size={14} /> Delete</button>
-                                      </div>
-                                    )}
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <button className="ps-btn ghost sm" title="View" onClick={() => { setSelectedCompetitor(c); loadIntel(c.id); setMode("detail"); setDetailTab("overview"); }}><Eye size={14} /></button>
+                                    <button className="ps-btn ghost sm" style={{ color: "#B23237" }} title="Delete" onClick={() => setConfirmDel(c)}><Trash2 size={14} /></button>
                                   </div>
                                 </td>
                               </tr>
@@ -634,10 +645,10 @@ export default function CompetitorIntelView() {
                 {React.createElement(THREAT_META[selectedCompetitor.threat_level || "low"].icon, { size: 22 })}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 20 }}>
+                <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 20, wordBreak: "break-word" }}>
                   {selectedCompetitor.name}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2, wordBreak: "break-word" }}>
                   {selectedCompetitor.category || "Competitor"}
                   {selectedCompetitor.product_name && (
                     <span style={{ marginLeft: 8 }}>· vs {selectedCompetitor.product_name}</span>
@@ -1305,6 +1316,22 @@ export default function CompetitorIntelView() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDel && (
+        <div className="overlay" onClick={() => setConfirmDel(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Delete {confirmDel.name}?</div>
+            <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.55, marginBottom: 20 }}>
+              This permanently removes <b>{confirmDel.name}</b> and all its intel snapshots. This cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="ps-btn ghost" onClick={() => setConfirmDel(null)}>Cancel</button>
+              <button className="ps-btn pri" style={{ background: "#E74C3C", borderColor: "#E74C3C" }} onClick={() => handleDeleteCompetitor(confirmDel.id)}>Delete</button>
+            </div>
           </div>
         </div>
       )}

@@ -7,6 +7,7 @@ import {
 } from "../api/client.js";
 import {
   Target,
+  Star,
   Search,
   ArrowRight,
   AlertTriangle,
@@ -818,7 +819,7 @@ export default function DealScoreView() {
   return (
     <div className="ps-container">
       <div className="ps-header">
-        <h1><Target size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Deal Scoring</h1>
+        <h1><Star size={24} style={{ marginRight: 10, verticalAlign: "-4px" }} />Deal Scores</h1>
         <p className="ps-muted">AI-powered assessment of deal quality and likelihood to close.</p>
       </div>
 
