@@ -82,8 +82,19 @@ function confidenceLabel(winCount, lossCount) {
 
 function formatDate(ts) {
   if (!ts) return "—";
-  const d = new Date(typeof ts === "string" ? ts : ts * 1000);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const normalized = typeof ts === 'string' && !ts.endsWith('Z') && !ts.includes('+') ? ts + 'Z' : ts;
+  const d = new Date(typeof normalized === 'string' ? normalized : normalized * 1000);
+  if (isNaN(d.getTime())) return "—";
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function ConversationIntelligenceView() {
@@ -584,6 +595,9 @@ export default function ConversationIntelligenceView() {
               {categoryMeta(categoryFilter).label}
               <button onClick={() => setCategoryFilter("all")}><X size={12} /></button>
             </span>
+          )}
+          {(patternFilter !== "all" || categoryFilter !== "all" || searchQ.trim()) && (
+            <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setPatternFilter("all"); setCategoryFilter("all"); setSearchQ(""); }}>Clear all</button>
           )}
         </div>
 

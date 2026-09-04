@@ -156,7 +156,7 @@ export default function CallAnalysisView({ products = [], initialScriptId = null
 
   return (
     <div className="ca-view">
-      <div className="ca-top">
+      <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Intelligence</div>
           <div className="ps-title"><AudioWaveform size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Call Analysis</div>
