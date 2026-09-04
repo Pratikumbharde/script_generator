@@ -4,7 +4,7 @@ import { RowSkeleton } from './shared/Skeletons.jsx'
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
 import AudioUpload from './shared/AudioUpload.jsx'
-import { Sparkles, RefreshCw, Trash2, Upload, FileText, ToggleLeft, ToggleRight, Search, X } from 'lucide-react'
+import { Sparkles, RefreshCw, Trash2, Upload, FileText, ToggleLeft, ToggleRight, Search, X, Mic } from 'lucide-react'
 
 const DOC_TYPES = [
   { id: 'pitch_deck', label: 'Pitch deck', icon: '📊' },
