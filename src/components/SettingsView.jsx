@@ -31,6 +31,7 @@ import {
   FileText,
   Send,
   Lock,
+  Settings,
 } from "lucide-react";
 
 const PROVIDERS = [
