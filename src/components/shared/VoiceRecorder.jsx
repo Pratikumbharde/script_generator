@@ -68,6 +68,10 @@ export default function VoiceRecorder({
   const timerRef = useRef(null)
   const recognitionRef = useRef(null)
   const finalTextRef = useRef('') // accumulated final text from Web Speech API
+  const gotResultRef = useRef(false) // whether any onresult has fired this session
+  const silenceCheckRef = useRef(null) // timeout that warns if no audio is detected
+  const wantListeningRef = useRef(false) // user intent — keep listening across Chrome's auto-restarts
+  const restartAttemptsRef = useRef(0) // consecutive restarts with no recognized speech (caps a broken-mic retry loop)
 
   // Check Web Speech API support
   useEffect(() => {
@@ -78,7 +82,9 @@ export default function VoiceRecorder({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      wantListeningRef.current = false
       if (timerRef.current) clearInterval(timerRef.current)
+      if (silenceCheckRef.current) clearTimeout(silenceCheckRef.current)
       if (mediaRef.current) mediaRef.current.getTracks().forEach(t => t.stop())
       if (recognitionRef.current) {
         try { recognitionRef.current.abort() } catch {}
@@ -86,20 +92,52 @@ export default function VoiceRecorder({
     }
   }, [])
 
-  // ─── Web Speech API (browser-native, zero backend) ───
-  const startWebSpeech = useCallback(async () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) return false
+  const stopCleanup = useCallback(() => {
+    setRecording(false)
+    setLoading(false)
+    setDuration(0)
+    wantListeningRef.current = false
+    restartAttemptsRef.current = 0
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (silenceCheckRef.current) {
+      clearTimeout(silenceCheckRef.current)
+      silenceCheckRef.current = null
+    }
+    if (mediaRef.current) {
+      mediaRef.current.getTracks().forEach(t => t.stop())
+      mediaRef.current = null
+    }
+    recognitionRef.current = null
+  }, [])
 
+  // ─── Web Speech API (browser-native, zero backend) ───
+  // Chrome's "continuous" recognition mode frequently ends itself on its own
+  // (firing 'no-speech' or 'aborted', then 'onend') even while the user is
+  // still talking or has just gone quiet for a moment. Previously those
+  // errors were silently ignored, which left the UI stuck on "Listening…"
+  // forever with a dead recognition session underneath. Now we transparently
+  // restart the session when that happens, so it behaves like real
+  // continuous dictation instead of dying silently.
+  const createRecognitionSession = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     const recognition = new SpeechRecognition()
     recognition.lang = WEB_SPEECH_LANG_MAP[language] || 'en-US'
     recognition.continuous = true
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
-    finalTextRef.current = ''
-
     recognition.onresult = (event) => {
+      gotResultRef.current = true
+      restartAttemptsRef.current = 0
+      if (silenceCheckRef.current) {
+        clearTimeout(silenceCheckRef.current)
+        silenceCheckRef.current = null
+      }
+      setError('') // clear any earlier "no audio detected" hint now that speech is coming through
+
       let interimTranscript = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
@@ -120,18 +158,44 @@ export default function VoiceRecorder({
     recognition.onerror = (event) => {
       console.warn('[WebSpeech] Error:', event.error)
       if (event.error === 'not-allowed') {
+        wantListeningRef.current = false
         setError('Microphone permission denied')
-      } else if (event.error === 'no-speech' || event.error === 'aborted') {
-        // Not fatal — may have just been silence
-        return // Don't stop recording for these
-      } else {
-        setError(`Speech recognition error: ${event.error}`)
+      } else if (event.error === 'audio-capture') {
+        wantListeningRef.current = false
+        setError('No microphone found. Check that a mic is connected and not disabled in Windows Sound settings.')
       }
-      stopCleanup()
+      // 'no-speech', 'aborted', 'network' and other transient errors are
+      // handled in onend below, which restarts the session if we're still
+      // meant to be listening — don't stop the UI for those here.
     }
 
     recognition.onend = () => {
-      // Recognition ended — deliver final result
+      if (wantListeningRef.current) {
+        restartAttemptsRef.current += 1
+        if (restartAttemptsRef.current > 6) {
+          wantListeningRef.current = false
+          setError('Speech recognition keeps stopping. Check that your microphone isn\'t muted and that Windows allows this browser to access it (Settings > Privacy & security > Microphone), then try again.')
+          stopCleanup()
+          return
+        }
+        // Small delay avoids a tight restart loop if the mic is genuinely unavailable
+        setTimeout(() => {
+          if (!wantListeningRef.current) return
+          try {
+            const next = createRecognitionSession()
+            recognitionRef.current = next
+            next.start()
+          } catch (err) {
+            console.warn('[WebSpeech] Restart failed:', err)
+            wantListeningRef.current = false
+            setError('Speech recognition stopped unexpectedly. Try again.')
+            stopCleanup()
+          }
+        }, 250)
+        return
+      }
+
+      // Intentional stop (or gave up above) — deliver final result
       const text = finalTextRef.current.trim()
       if (text && onTranscript) {
         onTranscript({
@@ -145,20 +209,48 @@ export default function VoiceRecorder({
       stopCleanup()
     }
 
+    return recognition
+  }, [language, onTranscript, onText, stopCleanup])
+
+  const startWebSpeech = useCallback(async () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return false
+
+    finalTextRef.current = ''
+    gotResultRef.current = false
+    restartAttemptsRef.current = 0
+    wantListeningRef.current = true
+
+    const recognition = createRecognitionSession()
     recognitionRef.current = recognition
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaRef.current = stream
 
+      const track = stream.getAudioTracks()[0]
+      if (track && track.muted) {
+        setError('Your microphone is muted at the system level — check Windows Settings > Privacy & security > Microphone and make sure "Let apps access your microphone" is on for this browser.')
+      }
+
       recognition.start()
       setRecording(true)
       setDuration(0)
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
 
+      // If no speech result comes in within a few seconds, the mic is likely
+      // being silenced at the OS level even though the browser got permission —
+      // surface a hint instead of leaving the user stuck on "Listening…" forever.
+      silenceCheckRef.current = setTimeout(() => {
+        if (!gotResultRef.current && recognitionRef.current) {
+          setError('No audio detected yet. If this keeps happening, check that your microphone isn\'t muted and that Windows allows this browser to access it (Settings > Privacy & security > Microphone).')
+        }
+      }, 6000)
+
       // Auto-stop after 2 minutes
       setTimeout(() => {
         if (recognitionRef.current) {
+          wantListeningRef.current = false
           recognitionRef.current.stop()
         }
       }, 120000)
@@ -166,25 +258,11 @@ export default function VoiceRecorder({
       return true
     } catch (err) {
       console.warn('[WebSpeech] Failed to start:', err)
+      wantListeningRef.current = false
       recognitionRef.current = null
       return false
     }
-  }, [language, onTranscript, onText])
-
-  const stopCleanup = useCallback(() => {
-    setRecording(false)
-    setLoading(false)
-    setDuration(0)
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    if (mediaRef.current) {
-      mediaRef.current.getTracks().forEach(t => t.stop())
-      mediaRef.current = null
-    }
-    recognitionRef.current = null
-  }, [])
+  }, [createRecognitionSession])
 
   // ─── Server-side transcription fallback ───
   const startServerTranscription = useCallback(async () => {
@@ -278,6 +356,8 @@ export default function VoiceRecorder({
 
   const stopRecording = useCallback(() => {
     if (recognitionRef.current) {
+      // Mark this as intentional so onend finalizes instead of auto-restarting
+      wantListeningRef.current = false
       // Web Speech API — stop recognition (onend handler delivers final result)
       recognitionRef.current.stop()
       // Cleanup happens in onend/onerror handlers

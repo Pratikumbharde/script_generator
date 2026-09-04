@@ -294,7 +294,7 @@ html[data-theme="dark"]{
 .vr-status{font-size:12px;color:var(--muted)}
 .vr-spin{animation:vr-spin 1s linear infinite}
 @keyframes vr-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-.vr-error{font-size:11px;color:#EF4444;margin-top:2px}
+.vr-error{font-size:11px;color:#EF4444;margin-top:2px;max-width:280px;line-height:1.4}
 
 /* diarized transcript */
 .dt-panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:8px;max-height:320px;overflow-y:auto}
