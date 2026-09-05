@@ -6,7 +6,7 @@ import { CardSkeleton, CockpitSkeleton } from "./shared/Skeletons.jsx";
 import LimitedInput from "./shared/LimitedInput.jsx";
 import VoiceRecorder from "./shared/VoiceRecorder.jsx";
 import Cockpit from "./ScriptCockpit.jsx";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Play } from "lucide-react";
 
 export default function StudioView({ product, preset, teamLanguages = [], staff = [], onBack, canGenerate = true, products = [], onSelectProduct, onAnalyze }) {
   // Member read-only mode: show assigned scripts
