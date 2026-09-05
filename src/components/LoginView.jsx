@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { login, register } from '../api/client.js'
+import React, { useState, useEffect } from 'react'
+import { login, register, forgotPassword, resetPassword } from '../api/client.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Eye, EyeOff } from 'lucide-react'
 
@@ -28,15 +28,33 @@ function validateCompany(v) {
 
 export default function LoginView() {
   const { setAuth } = useAuth()
-  const [mode, setMode] = useState('login') // 'login' | 'register'
+  const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot' | 'reset'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [company, setCompany] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [touched, setTouched] = useState({})
   const [formErrors, setFormErrors] = useState({})
+  const [resetToken, setResetToken] = useState('')
+
+  // If the user arrived via a password-reset email link (?resetToken=...&email=...),
+  // drop straight into the reset-password form.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('resetToken')
+    const resetEmail = params.get('email')
+    if (token && resetEmail) {
+      setResetToken(token)
+      setEmail(resetEmail)
+      setMode('reset')
+      // Strip the token out of the visible URL so it isn't kept in history/bookmarks.
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const touch = (field) => setTouched((t) => ({ ...t, [field]: true }))
 
@@ -44,6 +62,7 @@ export default function LoginView() {
     switch (field) {
       case 'email': return validateEmail(value)
       case 'password': return validatePassword(value)
+      case 'confirmPassword': return value !== password ? 'Passwords do not match' : ''
       case 'company': return validateCompany(value)
       default: return ''
     }
@@ -59,6 +78,54 @@ export default function LoginView() {
 
   const submit = async (e) => {
     e.preventDefault()
+
+    if (mode === 'forgot') {
+      const errors = { email: validateEmail(email) }
+      setFormErrors(errors)
+      setTouched({ email: true })
+      if (errors.email) return
+
+      setError('')
+      setInfo('')
+      setBusy(true)
+      try {
+        const data = await forgotPassword(email)
+        setInfo(data.message || 'If an account exists for that email, a password reset link has been sent.')
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+
+    if (mode === 'reset') {
+      const errors = {
+        password: validatePassword(password),
+        confirmPassword: password !== confirmPassword ? 'Passwords do not match' : '',
+      }
+      setFormErrors(errors)
+      setTouched({ password: true, confirmPassword: true })
+      if (errors.password || errors.confirmPassword) return
+
+      setError('')
+      setInfo('')
+      setBusy(true)
+      try {
+        const data = await resetPassword(resetToken, email, password)
+        setInfo(data.message || 'Password updated. You can now sign in.')
+        setPassword('')
+        setConfirmPassword('')
+        setTouched({})
+        setMode('login')
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+
     // Validate all fields
     const errors = {
       email: validateEmail(email),
@@ -91,6 +158,9 @@ export default function LoginView() {
   const switchTo = (newMode) => {
     setMode(newMode)
     setError('')
+    setInfo('')
+    setTouched({})
+    setFormErrors({})
     // Retain entered data when switching modes
     // Don't clear email, password, or company
   }
@@ -104,47 +174,81 @@ export default function LoginView() {
           <div className="ps-brand" style={{ justifyContent: 'center', marginBottom: 8, color: 'var(--ink)' }}>
             <span className="dot" /><span>Pitch Studio</span>
           </div>
-          <div className="ps-sub">{mode === 'login' ? 'Sign in to your workspace' : 'Create your workspace'}</div>
+          <div className="ps-sub">
+            {mode === 'login' && 'Sign in to your workspace'}
+            {mode === 'register' && 'Create your workspace'}
+            {mode === 'forgot' && 'We’ll email you a link to reset it'}
+            {mode === 'reset' && 'Choose a new password for your account'}
+          </div>
         </div>
 
         {error && <div className="err" style={{ marginBottom: 14 }}>{error}</div>}
+        {info && <div className="ok-msg" style={{ marginBottom: 14 }}>{info}</div>}
 
         <form onSubmit={submit} noValidate>
-          <div className="frow">
-            <label className="flab">Email ID<span className="req">*</span></label>
-            <input
-              className={`finp${hasFieldError('email') ? ' finp-error' : ''}`}
-              type="email"
-              value={email}
-              onChange={updateField('email', setEmail)}
-              onBlur={() => touch('email')}
-              placeholder={mode === 'login' ? 'you@company.com' : 'you@company.com'}
-              maxLength={EMAIL_MAX}
-              required
-              autoFocus
-            />
-            {hasFieldError('email') ? <div className="ferr">{formErrors.email}</div> : email.length > 0 && <div className="fchar">{email.length}/{EMAIL_MAX}</div>}
-          </div>
-
-          <div className="frow">
-            <label className="flab">Password<span className="req">*</span></label>
-            <div className="finp-wrap">
+          {(mode === 'login' || mode === 'register' || mode === 'forgot') && (
+            <div className="frow">
+              <label className="flab">Email ID<span className="req">*</span></label>
               <input
-                className={`finp${hasFieldError('password') ? ' finp-error' : ''}`}
+                className={`finp${hasFieldError('email') ? ' finp-error' : ''}`}
+                type="email"
+                value={email}
+                onChange={updateField('email', setEmail)}
+                onBlur={() => touch('email')}
+                placeholder="you@company.com"
+                maxLength={EMAIL_MAX}
+                required
+                autoFocus
+              />
+              {hasFieldError('email') ? <div className="ferr">{formErrors.email}</div> : email.length > 0 && <div className="fchar">{email.length}/{EMAIL_MAX}</div>}
+            </div>
+          )}
+
+          {(mode === 'login' || mode === 'register' || mode === 'reset') && (
+            <div className="frow">
+              <label className="flab">{mode === 'reset' ? 'New password' : 'Password'}<span className="req">*</span></label>
+              <div className="finp-wrap">
+                <input
+                  className={`finp${hasFieldError('password') ? ' finp-error' : ''}`}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={updateField('password', setPassword)}
+                  onBlur={() => touch('password')}
+                  placeholder={mode === 'login' ? 'Enter your password' : 'Minimum 6 characters'}
+                  maxLength={PASSWORD_MAX}
+                  required
+                  autoFocus={mode === 'reset'}
+                />
+                <button type="button" className="finp-toggle" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {hasFieldError('password') ? <div className="ferr">{formErrors.password}</div> : password.length > 0 ? <div className="fchar">{password.length}/{PASSWORD_MAX}</div> : (mode === 'register' || mode === 'reset') && <div className="fhint">At least 6 characters</div>}
+            </div>
+          )}
+
+          {mode === 'reset' && (
+            <div className="frow">
+              <label className="flab">Confirm new password<span className="req">*</span></label>
+              <input
+                className={`finp${hasFieldError('confirmPassword') ? ' finp-error' : ''}`}
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={updateField('password', setPassword)}
-                onBlur={() => touch('password')}
-                placeholder={mode === 'login' ? 'Enter your password' : 'Minimum 6 characters'}
+                value={confirmPassword}
+                onChange={updateField('confirmPassword', setConfirmPassword)}
+                onBlur={() => touch('confirmPassword')}
+                placeholder="Re-enter new password"
                 maxLength={PASSWORD_MAX}
                 required
               />
-              <button type="button" className="finp-toggle" onClick={() => setShowPassword(v => !v)} tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+              {hasFieldError('confirmPassword') && <div className="ferr">{formErrors.confirmPassword}</div>}
             </div>
-            {hasFieldError('password') ? <div className="ferr">{formErrors.password}</div> : password.length > 0 ? <div className="fchar">{password.length}/{PASSWORD_MAX}</div> : mode === 'register' && <div className="fhint">At least 6 characters</div>}
-          </div>
+          )}
+
+          {mode === 'login' && (
+            <div style={{ textAlign: 'right', marginTop: -8, marginBottom: 6 }}>
+              <button type="button" className="ps-btn subtle sm" onClick={() => switchTo('forgot')}>Forgot password?</button>
+            </div>
+          )}
 
           {mode === 'register' && (
             <div className="frow">
@@ -163,15 +267,24 @@ export default function LoginView() {
           )}
 
           <button className="ps-btn pri" type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}>
-            {busy ? <span className="spinner dark" /> : (mode === 'login' ? 'Sign in' : 'Create account')}
+            {busy ? <span className="spinner dark" /> : (
+              mode === 'login' ? 'Sign in' :
+              mode === 'register' ? 'Create account' :
+              mode === 'forgot' ? 'Send reset link' :
+              'Reset password'
+            )}
           </button>
         </form>
 
         <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13, color: 'var(--muted)' }}>
-          {mode === 'login' ? (
+          {mode === 'login' && (
             <>Don't have an account? <button className="ps-btn subtle sm" onClick={() => switchTo('register')} style={{ marginLeft: 4 }}>Register</button></>
-          ) : (
+          )}
+          {mode === 'register' && (
             <>Already have an account? <button className="ps-btn subtle sm" onClick={() => switchTo('login')} style={{ marginLeft: 4 }}>Sign in</button></>
+          )}
+          {(mode === 'forgot' || mode === 'reset') && (
+            <>Remembered your password? <button className="ps-btn subtle sm" onClick={() => switchTo('login')} style={{ marginLeft: 4 }}>Sign in</button></>
           )}
         </div>
       </div>

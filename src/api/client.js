@@ -56,6 +56,20 @@ export async function login(email, password) {
   return data
 }
 
+export async function forgotPassword(email) {
+  return fetchJson('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function resetPassword(token, email, password) {
+  return fetchJson('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, email, password }),
+  })
+}
+
 export async function me() {
   return fetchJson('/auth/me')
 }

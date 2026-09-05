@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import path from 'path'
 import nodemailer from 'nodemailer'
 import multer from 'multer'
+import crypto from 'node:crypto'
 
 dotenv.config()
 
@@ -22,6 +23,29 @@ const OLLAMA_API_KEY = process.env.OLLAMA_CLOUD_API_KEY
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.VITE_OLLAMA_MODEL || 'glm-5.2:cloud'
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || ''
 const STT_SERVICE_URL = process.env.STT_SERVICE_URL || 'http://localhost:8001'
+
+// System-level SMTP (used for transactional auth emails like password reset,
+// as opposed to the per-user SMTP prefs used for campaign/notification emails)
+const SMTP_HOST = process.env.SMTP_HOST || ''
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 587
+const SMTP_USER = process.env.SMTP_USER || ''
+const SMTP_PASS = process.env.SMTP_PASS || ''
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER || 'no-reply@pitchstudio.app'
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true'
+
+let systemTransporter = null
+function getSystemTransporter() {
+  if (!SMTP_HOST) return null
+  if (!systemTransporter) {
+    systemTransporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+    })
+  }
+  return systemTransporter
+}
 
 /* ---------- Multer for file uploads ---------- */
 const upload = multer({
@@ -745,6 +769,8 @@ function addColumnIfNotExists(table, column, def) {
   }
 }
 
+addColumnIfNotExists('users', 'reset_token_hash', 'TEXT')
+addColumnIfNotExists('users', 'reset_token_expires', 'INTEGER')
 addColumnIfNotExists('scripts', 'outcome', "TEXT CHECK(outcome IN ('won','lost','no_deal','pending'))")
 addColumnIfNotExists('scripts', 'notes', 'TEXT')
 addColumnIfNotExists('scripts', 'used_at', 'INTEGER')
@@ -1082,6 +1108,69 @@ app.post('/api/auth/login', (req, res) => {
     token,
     user: { id: user.id, email: user.email, name: user.name || '', role: user.role || 'member', company_name: user.company_name || '' }
   })
+})
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body
+  if (!email) return res.status(400).json({ error: 'Email required' })
+
+  // Always return a generic response so this endpoint can't be used to
+  // enumerate which emails are registered.
+  const genericResponse = { success: true, message: 'If an account exists for that email, a password reset link has been sent.' }
+
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email)
+  if (!user) return res.json(genericResponse)
+
+  const transporter = getSystemTransporter()
+  if (!transporter) {
+    console.error('[forgot-password] SMTP_HOST is not configured on the server — cannot send reset email')
+    return res.json(genericResponse)
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex')
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+  const expires = Date.now() + 60 * 60 * 1000 // 1 hour
+
+  db.prepare('UPDATE users SET reset_token_hash = ?, reset_token_expires = ? WHERE id = ?').run(tokenHash, expires, user.id)
+
+  const origin = req.get('origin') || `${req.protocol}://${req.get('host')}`
+  const resetLink = `${origin}/?resetToken=${rawToken}&email=${encodeURIComponent(user.email)}`
+
+  try {
+    await transporter.sendMail({
+      from: SMTP_FROM,
+      to: user.email,
+      subject: 'Reset your Pitch Studio password',
+      text: `We received a request to reset your Pitch Studio password.\n\nSet a new password here (this link expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.`,
+      html: `<p>We received a request to reset your Pitch Studio password.</p><p><a href="${resetLink}">Set a new password</a> (this link expires in 1 hour).</p><p>If you didn't request this, you can safely ignore this email.</p>`,
+    })
+  } catch (err) {
+    console.error('[forgot-password] Failed to send reset email:', err.message)
+  }
+
+  res.json(genericResponse)
+})
+
+app.post('/api/auth/reset-password', (req, res) => {
+  const { token, email, password } = req.body
+  if (!token || !email || !password) return res.status(400).json({ error: 'Token, email and new password are required' })
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+
+  const user = db.prepare('SELECT id, reset_token_hash, reset_token_expires FROM users WHERE email = ?').get(email)
+  if (!user || !user.reset_token_hash) return res.status(400).json({ error: 'Invalid or expired reset link' })
+  if (!user.reset_token_expires || user.reset_token_expires < Date.now()) {
+    return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' })
+  }
+
+  const providedHash = crypto.createHash('sha256').update(token).digest()
+  const storedHash = Buffer.from(user.reset_token_hash, 'hex')
+  const valid = providedHash.length === storedHash.length && crypto.timingSafeEqual(providedHash, storedHash)
+  if (!valid) return res.status(400).json({ error: 'Invalid or expired reset link' })
+
+  const password_hash = bcrypt.hashSync(password, 10)
+  db.prepare('UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = ?').run(password_hash, user.id)
+
+  res.json({ success: true, message: 'Password updated. You can now sign in.' })
 })
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
