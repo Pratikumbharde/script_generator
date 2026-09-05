@@ -27,14 +27,33 @@ import { STYLES } from "./src/styles/styles.js";
 import { S } from "./src/utils/helpers.js";
 import { CardSkeleton, SidebarSkeleton } from "./src/components/shared/Skeletons.jsx";
 
-/* ---------- Lazy-loaded heavy views ---------- */
-const CoachingInsightsView = lazy(() => import("./src/components/CoachingInsightsView.jsx"));
-const CompetitorIntelView   = lazy(() => import("./src/components/CompetitorIntelView.jsx"));
-const DealScoreView         = lazy(() => import("./src/components/DealScoreView.jsx"));
-const ScriptRefinementView  = lazy(() => import("./src/components/ScriptRefinementView.jsx"));
-const AutoOptimizationView  = lazy(() => import("./src/components/AutoOptimizationView.jsx"));
-const HeatmapView           = lazy(() => import("./src/components/HeatmapView.jsx"));
-const LeaderboardView       = lazy(() => import("./src/components/LeaderboardView.jsx"));
+/* ---------- Lazy-loaded heavy views ----------
+   After a new deploy, hashed chunk filenames change and the old ones are
+   deleted from the server. A tab still running the previous bundle will 404
+   when it tries to lazy-load a view by its stale hash, leaving the chunk's
+   exports (e.g. an icon component) undefined mid-render. Retry once with a
+   full reload so the tab picks up the current bundle instead of crashing. */
+function lazyWithReload(importer) {
+  return lazy(() =>
+    importer().catch((err) => {
+      const key = "ps-chunk-reload-" + importer.toString().match(/["'`]([^"'`]+)["'`]/)?.[1];
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+        return new Promise(() => {}); // suspend forever; reload is already in flight
+      }
+      throw err;
+    })
+  );
+}
+
+const CoachingInsightsView = lazyWithReload(() => import("./src/components/CoachingInsightsView.jsx"));
+const CompetitorIntelView   = lazyWithReload(() => import("./src/components/CompetitorIntelView.jsx"));
+const DealScoreView         = lazyWithReload(() => import("./src/components/DealScoreView.jsx"));
+const ScriptRefinementView  = lazyWithReload(() => import("./src/components/ScriptRefinementView.jsx"));
+const AutoOptimizationView  = lazyWithReload(() => import("./src/components/AutoOptimizationView.jsx"));
+const HeatmapView           = lazyWithReload(() => import("./src/components/HeatmapView.jsx"));
+const LeaderboardView       = lazyWithReload(() => import("./src/components/LeaderboardView.jsx"));
 
 /* ============================================================
    Pitch Studio — a live-call cockpit for sales teams.
