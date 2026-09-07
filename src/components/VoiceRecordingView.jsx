@@ -3,7 +3,12 @@ import { listScripts, listVoiceRecordings, createVoiceRecording, deleteVoiceReco
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
-export default function VoiceRecordingView({ scripts: scriptsProp = [] }) {
+/* Stable default so the load effect doesn't refire on every render
+   (a literal `= []` default creates a new array identity each render →
+   the effect saw new deps each render → infinite /api/scripts loop). */
+const EMPTY_SCRIPTS = []
+
+export default function VoiceRecordingView({ scripts: scriptsProp = EMPTY_SCRIPTS }) {
   const [scripts, setScripts] = useState(scriptsProp)
   const [recordings, setRecordings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -11,7 +16,7 @@ export default function VoiceRecordingView({ scripts: scriptsProp = [] }) {
   const [form, setForm] = useState({ script_id: '', segment_index: -1, text_content: '', voice_id: 'default' })
 
   useEffect(() => {
-    if (scriptsProp.length > 0) return
+    if (scriptsProp.length > 0) { setScripts(scriptsProp); return }
     listScripts().then((s) => setScripts(s || [])).catch(() => {})
   }, [scriptsProp])
 

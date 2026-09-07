@@ -66,7 +66,12 @@ function timeAgo(ts) {
   return formatDate(ts);
 }
 
-export default function AutoOptimizationView({ scripts: scriptsProp = [] }) {
+/* Stable default so the load effect doesn't refire on every render
+   (a literal `= []` default creates a new array identity each render →
+   the effect saw new deps each render → infinite /api/scripts loop). */
+const EMPTY_SCRIPTS = [];
+
+export default function AutoOptimizationView({ scripts: scriptsProp = EMPTY_SCRIPTS }) {
   const [scripts, setScripts] = useState(scriptsProp);
   const [overview, setOverview] = useState(null);
   const [opts, setOpts] = useState([]);
@@ -80,7 +85,7 @@ export default function AutoOptimizationView({ scripts: scriptsProp = [] }) {
   const [historyFilter, setHistoryFilter] = useState("all");
 
   useEffect(() => {
-    if (scriptsProp.length > 0) return;
+    if (scriptsProp.length > 0) { setScripts(scriptsProp); return; }
     listScripts().then((s) => setScripts(s || [])).catch(() => {});
   }, [scriptsProp]);
 

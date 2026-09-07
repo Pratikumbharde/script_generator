@@ -4023,7 +4023,7 @@ app.post('/api/script-variants', requireAuth, (req, res) => {
       simple = excluded.simple,
       persona = excluded.persona,
       segments_json = excluded.segments_json
-  `).run(req.userId, group_name, variant, script_id || null, product_id, call_type || '', duration || 0, language || 'en', region || 'india', delivery || 'phone', simple || 0, persona || 'general', segments_json || '')
+  `).run(req.userId, group_name, variant, script_id || null, product_id, method, call_type || '', duration || 0, language || 'en', region || 'india', delivery || 'phone', simple || 0, persona || 'general', segments_json || '')
 
   const row = db.prepare('SELECT * FROM script_variants WHERE id = ?').get(result.lastInsertRowid || result.changes)
   res.json({ variant: row })

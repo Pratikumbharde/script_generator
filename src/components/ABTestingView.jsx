@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { listScripts, listScriptVariants, createScriptVariant, useScriptVariant, getVariantWinner, deleteScriptVariant } from '../api/client.js'
 import LimitedInput from './shared/LimitedInput.jsx'
 
-export default function ABTestingView({ scripts: scriptsProp = [], products = [] }) {
+/* Stable default so the load effect below doesn't refire on every render
+   (a literal `= []` default creates a new array identity each render →
+   the effect saw new deps each render → infinite /api/scripts loop). */
+const EMPTY_SCRIPTS = []
+
+export default function ABTestingView({ scripts: scriptsProp = EMPTY_SCRIPTS, products = [] }) {
   const [scripts, setScripts] = useState(scriptsProp)
   const [groups, setGroups] = useState({})
   const [loading, setLoading] = useState(true)
@@ -11,9 +16,10 @@ export default function ABTestingView({ scripts: scriptsProp = [], products = []
   const [scriptId, setScriptId] = useState('')
   const [productId, setProductId] = useState('')
   const [winners, setWinners] = useState({})
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
-    if (scriptsProp.length > 0) return
+    if (scriptsProp.length > 0) { setScripts(scriptsProp); return }
     listScripts().then((s) => setScripts(s || [])).catch(() => {})
   }, [scriptsProp])
 
@@ -51,23 +57,28 @@ export default function ABTestingView({ scripts: scriptsProp = [], products = []
   async function handleAdd() {
     if (!groupName.trim() || !scriptId || !productId) return
     const script = scripts.find((s) => String(s.id) === String(scriptId))
-    await createScriptVariant({
-      group_name: groupName.trim(),
-      variant,
-      script_id: scriptId,
-      product_id: productId,
-      method: script?.method || '',
-      call_type: script?.call_type || '',
-      duration: script?.duration || 0,
-      language: script?.language || 'en',
-      region: script?.region || 'india',
-      delivery: script?.delivery || 'phone',
-      simple: script?.simple || 0,
-      persona: script?.persona || 'general',
-      segments_json: script?.segments_json || '',
-    })
-    setScriptId('')
-    await load()
+    setFormError('')
+    try {
+      await createScriptVariant({
+        group_name: groupName.trim(),
+        variant,
+        script_id: scriptId,
+        product_id: productId,
+        method: script?.method || '',
+        call_type: script?.call_type || '',
+        duration: script?.duration || 0,
+        language: script?.language || 'en',
+        region: script?.region || 'india',
+        delivery: script?.delivery || 'phone',
+        simple: script?.simple || 0,
+        persona: script?.persona || 'general',
+        segments_json: script?.segments_json || '',
+      })
+      setScriptId('')
+      await load()
+    } catch (e) {
+      setFormError(e.message || 'Failed to add variant — try again')
+    }
   }
 
   async function handleUse(id, outcome) {
@@ -121,6 +132,7 @@ export default function ABTestingView({ scripts: scriptsProp = [], products = []
         <button className="ps-btn" onClick={handleAdd} disabled={!groupName.trim() || !scriptId || !productId}>
           ➕ Add Variant
         </button>
+        {formError && <div style={{ color: '#B23237', fontSize: 13, marginTop: 8 }}>⚠ {formError}</div>}
       </div>
 
       {loading ? (

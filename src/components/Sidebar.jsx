@@ -302,7 +302,11 @@ export default function Sidebar({ view, setView, active, company, workspace, use
               <Settings size={16} />
               {!collapsed && <span>Settings</span>}
             </button>
-            <button className="es-footer-btn" disabled title="Coming soon">
+            <button
+              className="es-footer-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("ps:start-tour"))}
+              title="Take a tour of Pitch Studio"
+            >
               <HelpCircle size={16} />
               {!collapsed && <span>Help</span>}
             </button>

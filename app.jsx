@@ -24,6 +24,7 @@ import CallAnalysisView from "./src/components/CallAnalysisView.jsx";
 import SelfImprovementView from "./src/components/SelfImprovementView.jsx";
 import VoiceDNA from "./src/components/VoiceDNA.jsx";
 import Sidebar from "./src/components/Sidebar.jsx";
+import TourGuide from "./src/components/TourGuide.jsx";
 import { useAuth } from "./src/context/AuthContext.jsx";
 import { getPreferences } from "./src/api/client.js";
 import { STYLES } from "./src/styles/styles.js";
@@ -197,6 +198,7 @@ export default function PitchStudio() {
     <div className="ps-root"><style>{STYLES}</style>
       <div className="ps-shell">
         <Sidebar view={view} setView={setView} active={active} company={company} workspace={workspace} user={user} logout={logout} canGenerate={canGenerate} />
+        <TourGuide view={view} setView={setView} user={user} canGenerate={canGenerate} />
 
         <main className="ps-main">
           <Suspense fallback={<div style={{ padding: 40 }}><CardSkeleton count={4} /></div>}>
