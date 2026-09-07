@@ -309,7 +309,7 @@ export default function PitchStudio() {
             <AutoOptimizationView />
           )}
           {view === "heatmap" && (
-            <HeatmapView />
+            <HeatmapView onPractice={() => setView("practice")} />
           )}
           </Suspense>
         </main>

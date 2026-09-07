@@ -194,6 +194,7 @@ export default function AutomationRulesView() {
           <div className="ps-title"><Zap size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Automation Rules</div>
           <div className="ps-sub">Zapier-style triggers. When X happens, send a webhook, email, or Slack message.</div>
         </div>
+        
         <button className="ps-btn pri" onClick={openForm}>+ Add rule</button>
       </div>
 
@@ -209,7 +210,7 @@ export default function AutomationRulesView() {
           <div className="ps-empty">
             <div className="big">No automation rules yet</div>
             <p>Connect Pitch Studio to your tools. When events happen, we'll send data automatically.</p>
-            <button className="ps-btn pri" onClick={openForm}>+ Create your first rule</button>
+            <button className="ps-btn pri" onClick={() => setShowForm(true)}>+ Create your first rule</button>
           </div>
         )}
 

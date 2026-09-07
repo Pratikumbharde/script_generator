@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { S, nameOf, parseScriptKey, callModel } from "../utils/helpers.js";
+import { consumePracticeRequest } from "../utils/practiceSignal.js";
 import { METHODS, CALL_TYPES, LANGUAGES } from "../data/constants.js";
 import { RowSkeleton } from "./shared/Skeletons.jsx";
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
@@ -24,6 +25,20 @@ const SR_LANGS = {
   en: "en-US", hinglish: "hi-IN", hi: "hi-IN", mr: "mr-IN", ta: "ta-IN",
   te: "te-IN", bn: "bn-IN", gu: "gu-IN", kn: "kn-IN", pa: "pa-IN",
 };
+
+/* Mic-language picker options (unique recognizer locales) */
+const SR_LANG_OPTIONS = [
+  { tag: "", label: "Auto — script language" },
+  { tag: "en-US", label: "English" },
+  { tag: "hi-IN", label: "हिन्दी / Hinglish" },
+  { tag: "mr-IN", label: "मराठी Marathi" },
+  { tag: "ta-IN", label: "தமிழ் Tamil" },
+  { tag: "te-IN", label: "తెలుగు Telugu" },
+  { tag: "bn-IN", label: "বাংলা Bengali" },
+  { tag: "gu-IN", label: "ગુજરાતી Gujarati" },
+  { tag: "kn-IN", label: "ಕನ್ನಡ Kannada" },
+  { tag: "pa-IN", label: "ਪੰਜਾਬੀ Punjabi" },
+];
 
 function loadHistory() {
   try {
@@ -96,6 +111,20 @@ export default function PracticeView({ products }) {
   const recognitionRef = useRef(null);
   const keepListeningRef = useRef(false);
   const abortRef = useRef(false);
+
+  /* Mic language: "" = auto (follow the practiced script's language) */
+  const [srLang, setSrLang] = useState(() => {
+    try { return localStorage.getItem("ps_sr_lang") || ""; } catch { return ""; }
+  });
+  const srLangRef = useRef(srLang);
+  srLangRef.current = srLang;
+
+  /* ── Phrase drill (requested from Conversation Intelligence) ── */
+  const pendingPhraseRef = useRef(null);
+  useEffect(() => {
+    const req = consumePracticeRequest();
+    if (req?.phrase) pendingPhraseRef.current = req;
+  }, []);
 
   /* Load scripts */
   useEffect(() => {
@@ -260,7 +289,9 @@ export default function PracticeView({ products }) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
-    if (isListening) {
+    /* Guard on the ref, not the isListening state — a delayed restart after a
+       language switch calls this with a stale closure. */
+    if (recognitionRef.current) {
       stopListening();
       return;
     }
@@ -268,9 +299,10 @@ export default function PracticeView({ products }) {
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    /* Match the recognition language to the practiced script (Hinglish → hi-IN
-       handles mixed Hindi+English speech best in Chrome) */
-    recognition.lang = SR_LANGS[selectedScript?.meta?.language] || "en-US";
+    /* Speech recognizers cannot auto-detect language — they must be told.
+       Default to the user's picked mic language, else the practiced script's
+       language (Hinglish → hi-IN handles mixed Hindi+English best in Chrome). */
+    recognition.lang = srLangRef.current || SR_LANGS[selectedScript?.meta?.language] || "en-US";
 
     recognition.onresult = (event) => {
       let finalChunk = "";
@@ -301,8 +333,10 @@ export default function PracticeView({ products }) {
 
     recognition.onend = () => {
       /* Chrome auto-ends recognition after a pause or ~60s of speech — restart
-         while the user still wants to dictate so the mic doesn't die silently */
-      if (keepListeningRef.current) {
+         while the user still wants to dictate so the mic doesn't die silently.
+         Only restart if this is still the active recognizer (a language switch
+         or stop may have replaced it). */
+      if (keepListeningRef.current && recognitionRef.current === recognition) {
         try {
           recognition.start();
         } catch {
@@ -330,7 +364,67 @@ export default function PracticeView({ products }) {
     }
   }, [isListening, stopListening, selectedScript]);
 
+  /* Switch mic language; if dictation is running, restart the recognizer with
+     the new locale so the change applies immediately (a running recognizer
+     keeps its original language until restarted). */
+  const changeSrLang = (tag) => {
+    setSrLang(tag);
+    try { localStorage.setItem("ps_sr_lang", tag); } catch { /* noop */ }
+    if (isListening) {
+      stopListening();
+      setTimeout(() => toggleListening(), 350); // toggleListening reads srLangRef
+    }
+  };
+
   /* ── Scenario generation ── */
+
+  /* Practice a phrase from Conversation Intelligence: objection-category
+     phrases ARE buyer lines, so drill them directly; for the rest, have the
+     AI produce a prospect line that gives the rep a natural opening to use
+     the phrase. Falls back to the phrase itself if generation fails. */
+  const startPhraseScenario = async (phrase, category) => {
+    setError("");
+    setResult(null);
+    setResponse("");
+    abortRef.current = false;
+    /* Session screen needs a script context — use the newest saved script, or a
+       synthetic one so phrase drills work even with an empty script library. */
+    setSelectedScript(scripts?.[0] || { key: "phrase-drill", meta: { method: "", callType: "" }, data: {}, objections: [], productName: "Phrase drill", savedAt: 0 });
+
+    if (category === "objection") {
+      setScenario({ buyerLine: String(phrase).slice(0, 400), recommendedResponse: "", timestamp: Date.now(), source: "phrase" });
+      return;
+    }
+    setScenario(null);
+    try {
+      const SYS = "You are writing a role-play scenario for sales training. Output ONLY the prospect's line — 1-2 sentences, no quotes, no explanation.";
+      const prompt = `The rep is practicing this winning phrase: "${phrase}" (category: ${category || "general"}).
+Write one realistic line a prospect would say that gives the rep a natural opening to use that phrase.`;
+      const ai = await callModel(SYS, prompt);
+      if (abortRef.current) return;
+      const text = (ai?.message?.content || ai?.content || "").trim().replace(/^["'“”]+|["'“”]+$/g, "").slice(0, 400);
+      setScenario({
+        buyerLine: text || String(phrase).slice(0, 400),
+        recommendedResponse: String(phrase).slice(0, 600),
+        timestamp: Date.now(),
+        source: "phrase",
+      });
+    } catch {
+      if (!abortRef.current) {
+        setScenario({ buyerLine: String(phrase).slice(0, 400), recommendedResponse: "", timestamp: Date.now(), source: "phrase" });
+      }
+    }
+  };
+
+  /* Run the drill once the script list has loaded (signal survives the view switch) */
+  useEffect(() => {
+    if (scripts && pendingPhraseRef.current) {
+      const { phrase, category } = pendingPhraseRef.current;
+      pendingPhraseRef.current = null;
+      startPhraseScenario(phrase, category);
+    }
+  }, [scripts]);
+
   const pickScenario = async (scriptRec) => {
     setSelectedScript(scriptRec);
     setScenario(null);
@@ -985,6 +1079,11 @@ Evaluate the response.`;
                       From your script’s objection bank
                     </div>
                   )}
+                  {scenario.source === "phrase" && (
+                    <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 6 }}>
+                      Phrase drill from Conversation Intelligence
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
@@ -1039,13 +1138,29 @@ Evaluate the response.`;
                       </button>
                     )}
                   </div>
-                  <div className="fhint">
-                    {isListening ? (
-                      <span style={{ color: "#B23237", fontWeight: 600 }}>● Listening… speak clearly</span>
-                    ) : (
-                      <>
-                        Cmd/Ctrl + Enter to submit · {speechSupported ? "Click the mic to dictate" : "Type your response"}
-                      </>
+                  <div className="fhint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span>
+                      {isListening ? (
+                        <span style={{ color: "#B23237", fontWeight: 600 }}>● Listening… speak clearly</span>
+                      ) : (
+                        <>
+                          Cmd/Ctrl + Enter to submit · {speechSupported ? "Click the mic to dictate" : "Type your response"}
+                        </>
+                      )}
+                    </span>
+                    {speechSupported && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--faint)", whiteSpace: "nowrap" }}>
+                        Mic language
+                        <select
+                          className="fsel"
+                          value={srLang}
+                          onChange={(e) => changeSrLang(e.target.value)}
+                          title="The language you'll speak in. The recognizer can't auto-detect it — pick the one matching your speech."
+                          style={{ width: "auto", minWidth: 170, padding: "4px 8px", fontSize: 12 }}
+                        >
+                          {SR_LANG_OPTIONS.map((o) => <option key={o.tag} value={o.tag}>{o.label}</option>)}
+                        </select>
+                      </label>
                     )}
                   </div>
                 </div>

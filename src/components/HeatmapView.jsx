@@ -7,6 +7,7 @@ import {
   getCIOverview,
   getCICalls,
 } from "../api/client.js";
+import { requestPractice } from "../utils/practiceSignal.js";
 import {
   Activity,
   BarChart3,
@@ -99,7 +100,7 @@ function formatDate(ts) {
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function ConversationIntelligenceView() {
+export default function ConversationIntelligenceView({ onPractice }) {
   const [tab, setTab] = useState("overview");
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -315,7 +316,9 @@ export default function ConversationIntelligenceView() {
       {
         label: "Top insight",
         value: overview.topWinningPhrase ? "Available" : "—",
-        sub: overview.topWinningPhrase?.phrase?.slice(0, 40) + (overview.topWinningPhrase?.phrase?.length > 40 ? "…" : "") || "Analyze scripts",
+        sub: overview.topWinningPhrase?.phrase
+          ? overview.topWinningPhrase.phrase.slice(0, 40) + (overview.topWinningPhrase.phrase.length > 40 ? "…" : "")
+          : "Analyze scripts",
         icon: Zap,
       },
     ];
@@ -981,8 +984,9 @@ export default function ConversationIntelligenceView() {
             <button
               className="ps-btn pri"
               onClick={() => {
-                /* Could navigate to practice with this phrase */
-                console.warn("Practice module integration: not yet implemented");
+                requestPractice({ phrase: p.phrase, category: p.category });
+                setSelectedPhrase(null);
+                onPractice?.();
               }}
             >
               <Target size={16} style={{ marginRight: 6 }} />

@@ -5148,6 +5148,12 @@ Return ONLY valid JSON with this structure:
   }
 }
 
+CRITICAL OUTPUT RULES:
+- Your ENTIRE reply must be one single JSON object. Start with { and end with }.
+- Do NOT think out loud. Do NOT explain. Do NOT show your reasoning, scratchpad, or step-by-step analysis. Any text outside the JSON makes the reply invalid.
+- Do the analysis silently; the JSON is the only thing you output.
+- Include at most 12 phrases — only the strongest patterns.
+
 Rules:
 - Only include phrases that appear in at least 2 calls
 - Be specific: "Would you be open to..." is better than "ask questions"
@@ -5158,22 +5164,40 @@ Rules:
       `--- Script ID: ${s.id} | Outcome: ${s.outcome} | Method: ${s.method} | Type: ${s.call_type} ---\n${s.text}`
     ).join('\n\n')
 
-    const ai = await aiComplete(req.userId, [
+    const baseMessages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
-    ])
+    ]
 
+    /* glm-family models sometimes ignore the JSON-only contract and burn the
+       whole output on chain-of-thought (truncated before any { appears), so
+       strip thinking blocks and retry once with the bad reply in context. */
+    const stripThinking = (t) => String(t || '')
+      .replace(/```json/gi, '').replace(/```/g, '')
+      .replace(/<\/?(?:think|thinking|reasoning|scratchpad)>[\s\S]*?<\/(?:think|thinking|reasoning|scratchpad)>/gi, '')
+      .trim()
+
+    const tryParse = (text) => {
+      try { return parseAIJSON(stripThinking(text)) } catch (_) { return { raw: text } }
+    }
+
+    const ai = await aiComplete(req.userId, baseMessages)
     if (!ai.ok) {
       return res.status(ai.status).json({ error: ai.error })
     }
+    let generated = ai.content
+    let parsed = tryParse(generated)
 
-    const generated = ai.content
-    let parsed = {}
-    try {
-      const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = parseAIJSON(clean)
-    } catch (_) {
-      parsed = { raw: generated }
+    if (!Array.isArray(parsed.phrases) || parsed.phrases.length === 0) {
+      const retry = await aiComplete(req.userId, [
+        ...baseMessages,
+        { role: 'assistant', content: generated.slice(0, 4000) },
+        { role: 'user', content: 'Your previous reply was not the required JSON (it was reasoning text or got truncated). Reply again with ONLY the JSON object — starting with { and ending with } — and no other text.' },
+      ])
+      if (retry.ok) {
+        generated = retry.content
+        parsed = tryParse(generated)
+      }
     }
 
     const { workspaceId } = getUserWorkspaceRole(req.userId)
