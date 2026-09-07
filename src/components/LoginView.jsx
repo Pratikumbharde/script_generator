@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { login, register, forgotPassword, resetPassword } from '../api/client.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { requestTour } from '../utils/tourSignal.js'
 import { Eye, EyeOff } from 'lucide-react'
 
 const EMAIL_MAX = 254
@@ -152,6 +153,8 @@ export default function LoginView({ initialMode = 'login', onBack }) {
         data = await register(email, password, company)
       }
       setAuth(data.token, data.user)
+      // Show the quick-start tour on this login (once per login, not on refresh)
+      requestTour()
     } catch (err) {
       setError(err.message)
     } finally {

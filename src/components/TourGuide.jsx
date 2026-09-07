@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { TOUR_STEPS } from '../data/tourSteps.js'
+import { consumeTourRequest } from '../utils/tourSignal.js'
 import { X, ArrowRight, ArrowLeft, Compass } from 'lucide-react'
 
 /* ============================================================
@@ -7,13 +8,24 @@ import { X, ArrowRight, ArrowLeft, Compass } from 'lucide-react'
    - Spotlight + tooltip per step; centered modal for welcome/done.
    - Navigates between pages via setView and waits for the target
      to appear (handles lazy-loaded views and data refreshes).
-   - Auto-starts once for new users; replayable via the sidebar
-     Help button (dispatches window event 'ps:start-tour').
-   - Skip/finish persists ps_tour_done_v1 so it never nags again.
+   - Auto-starts on every real login (login/register), via the
+     one-shot signal in utils/tourSignal.js. A restored session
+     (page refresh) does NOT re-trigger it. Once closed it stays
+     closed until the next logout → login. Replayable anytime via
+     the sidebar Help button (window event 'ps:start-tour').
    ============================================================ */
 
-const TOUR_KEY = 'ps_tour_done_v1'
 const TOUR_EVENT = 'ps:start-tour'
+
+/* A target counts only when it's actually laid out. When React suspends a
+   lazy view it HIDES the previous page's tree with display:none instead of
+   unmounting it — so the old page's header is still in the DOM at 0×0.
+   Measuring that would shrink the spotlight to a dot at the corner. */
+const isVisibleTarget = (el) => {
+  if (!el) return false
+  const r = el.getBoundingClientRect()
+  return r.width > 1 && r.height > 1
+}
 
 const TOUR_CSS = `
 .tg-blocker{position:fixed;inset:0;z-index:99998}
@@ -79,9 +91,8 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
   const isFirst = idx === 0
   const isLast = idx === steps.length - 1
 
-  const finish = React.useCallback((mark = true) => {
+  const finish = React.useCallback(() => {
     setRunning(false)
-    if (mark) { try { localStorage.setItem(TOUR_KEY, '1') } catch { /* private mode */ } }
   }, [])
 
   const goTo = React.useCallback((i) => {
@@ -101,13 +112,11 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
 
   const prev = React.useCallback(() => { if (idx > 0) goTo(idx - 1) }, [idx, goTo])
 
-  /* auto-start once for new users */
+  /* auto-start on every actual login (not on session restore/refresh).
+     No cleanup on this timer — StrictMode double-runs this effect and
+     the signal is one-shot, so a cleaned-up timer would swallow it. */
   useEffect(() => {
-    let done = false
-    try { done = localStorage.getItem(TOUR_KEY) === '1' } catch { /* noop */ }
-    if (done) return
-    const t = setTimeout(() => setRunning(true), 900)
-    return () => clearTimeout(t)
+    if (consumeTourRequest()) setTimeout(() => setRunning(true), 900)
   }, [])
 
   /* replay from the sidebar Help button */
@@ -127,16 +136,17 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
     const tryFind = () => {
       if (cancelled) return
       const el = document.querySelector(step.selector)
-      if (el) {
+      if (el && isVisibleTarget(el)) {
         // bring it into view, then measure
         el.scrollIntoView({ block: 'center', behavior: 'instant' })
         requestAnimationFrame(() => {
           if (cancelled) return
+          if (!isVisibleTarget(el)) return
           const r = el.getBoundingClientRect()
           setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
           setReady(true)
         })
-      } else if (Date.now() - started < 8000) {
+      } else if (Date.now() - started < 12000) {
         setTimeout(tryFind, 120)
       } else {
         // target never appeared — fall back to a centered tip
@@ -154,7 +164,7 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
     if (!running || !ready || targetless || !step) return
     const update = () => {
       const el = document.querySelector(step.selector)
-      if (!el) return
+      if (!el || !isVisibleTarget(el)) return // never clobber with a hidden 0×0 box
       const r = el.getBoundingClientRect()
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
     }
