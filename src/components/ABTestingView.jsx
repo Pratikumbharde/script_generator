@@ -23,6 +23,15 @@ export default function ABTestingView({ scripts: scriptsProp = EMPTY_SCRIPTS, pr
     listScripts().then((s) => setScripts(s || [])).catch(() => {})
   }, [scriptsProp])
 
+  /* Prefill the create form with an existing group name so the missing
+     side (A or B) of a test can be added in one click. */
+  function prefillMissingVariant(name, vkey, sample) {
+    setGroupName(name)
+    setVariant(vkey)
+    if (sample?.product_id) setProductId(String(sample.product_id))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function load() {
     setLoading(true)
     try {
@@ -104,31 +113,43 @@ export default function ABTestingView({ scripts: scriptsProp = EMPTY_SCRIPTS, pr
 
       <div className="ps-card" style={{ marginBottom: 24 }}>
         <h3 className="ps-section-title">Add Variant</h3>
-        <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <LimitedInput
-            className="ps-input"
-            maxLength={200}
-            placeholder="Group name (e.g. 'Enterprise-Q3')"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-          />
-          <select className="ps-select" value={variant} onChange={(e) => setVariant(e.target.value)}>
-            <option value="A">Variant A</option>
-            <option value="B">Variant B</option>
-          </select>
-          <select className="ps-select" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">Select product</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+        <div className="ps-form-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, alignItems: 'end', marginBottom: 12 }}>
+          <label style={{ display: 'block', minWidth: 0 }}>
+            <span className="ps-muted" style={{ display: 'block', fontSize: 11, marginBottom: 4 }}>Group name</span>
+            <LimitedInput
+              className="ps-input"
+              maxLength={200}
+              placeholder="e.g. Enterprise-Q3"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+            />
+          </label>
+          <label style={{ display: 'block', minWidth: 0 }}>
+            <span className="ps-muted" style={{ display: 'block', fontSize: 11, marginBottom: 4 }}>Variant</span>
+            <select className="ps-select" value={variant} onChange={(e) => setVariant(e.target.value)}>
+              <option value="A">Variant A</option>
+              <option value="B">Variant B</option>
+            </select>
+          </label>
+          <label style={{ display: 'block', minWidth: 0 }}>
+            <span className="ps-muted" style={{ display: 'block', fontSize: 11, marginBottom: 4 }}>Product</span>
+            <select className="ps-select" value={productId} onChange={(e) => setProductId(e.target.value)}>
+              <option value="">Select product</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
         </div>
-        <select className="ps-select" value={scriptId} onChange={(e) => setScriptId(e.target.value)} style={{ marginBottom: 12 }}>
-          <option value="">Select script to variant</option>
-          {scripts.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.method} • {s.call_type} • {s.language}
-            </option>
-          ))}
-        </select>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span className="ps-muted" style={{ display: 'block', fontSize: 11, marginBottom: 4 }}>Script</span>
+          <select className="ps-select" value={scriptId} onChange={(e) => setScriptId(e.target.value)}>
+            <option value="">Select script to variant</option>
+            {scripts.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.method} • {s.call_type} • {s.language}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="ps-btn" onClick={handleAdd} disabled={!groupName.trim() || !scriptId || !productId}>
           ➕ Add Variant
         </button>
@@ -147,7 +168,7 @@ export default function ABTestingView({ scripts: scriptsProp = EMPTY_SCRIPTS, pr
             const win = winners[name]
             return (
               <div key={name} className="ps-card">
-                <div className="ps-flex-between" style={{ marginBottom: 12 }}>
+                <div className="ps-flex-between" style={{ marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
                   <h3 className="ps-section-title">{name}</h3>
                   {win && win.winner !== 'tie' && (
                     <span className="ps-tag ps-tag-accent">
@@ -156,24 +177,42 @@ export default function ABTestingView({ scripts: scriptsProp = EMPTY_SCRIPTS, pr
                   )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                   {['A', 'B'].map((vkey) => {
                     const v = vkey === 'A' ? a : b
-                    if (!v) return <div key={vkey} className="ps-empty">No variant {vkey}</div>
+                    if (!v) {
+                      const sample = vkey === 'A' ? b : a
+                      return (
+                        <div key={vkey} style={{
+                          padding: 12, minWidth: 0, display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center', gap: 8, textAlign: 'center',
+                          border: '1.5px dashed var(--line)', borderRadius: 12,
+                        }}>
+                          <div style={{ fontWeight: 700 }}>Variant {vkey}</div>
+                          <div className="ps-muted" style={{ fontSize: 12 }}>Not added yet — add it to start comparing.</div>
+                          <button
+                            className="ps-btn-sm"
+                            onClick={() => prefillMissingVariant(name, vkey, sample)}
+                          >
+                            ➕ Add Variant {vkey}
+                          </button>
+                        </div>
+                      )
+                    }
                     const rate = v.usage_count > 0 ? Math.round((v.win_count / v.usage_count) * 100) : 0
                     return (
-                      <div key={vkey} className="ps-card" style={{ padding: 12, border: win?.winner === vkey ? '2px solid var(--accent)' : undefined }}>
-                        <div className="ps-flex-between">
-                          <strong>Variant {vkey}</strong>
+                      <div key={vkey} className="ps-card" style={{ padding: 12, minWidth: 0, border: win?.winner === vkey ? '2px solid var(--accent)' : undefined }}>
+                        <div className="ps-flex-between" style={{ gap: 8 }}>
+                          <strong style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>Variant {vkey}</strong>
                           <button className="ps-btn-ghost" onClick={() => handleDelete(v.id)}>🗑</button>
                         </div>
-                        <div className="ps-muted" style={{ fontSize: 12, marginTop: 4 }}>{v.method} • {v.call_type}</div>
-                        <div className="ps-flex" style={{ gap: 16, marginTop: 12 }}>
+                        <div className="ps-muted" style={{ fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.method} • {v.call_type}</div>
+                        <div className="ps-flex" style={{ gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
                           <div><div className="ps-muted" style={{ fontSize: 11 }}>Usage</div><div style={{ fontWeight: 700 }}>{v.usage_count}</div></div>
                           <div><div className="ps-muted" style={{ fontSize: 11 }}>Wins</div><div style={{ fontWeight: 700, color: '#22c55e' }}>{v.win_count}</div></div>
                           <div><div className="ps-muted" style={{ fontSize: 11 }}>Win rate</div><div style={{ fontWeight: 700 }}>{rate}%</div></div>
                         </div>
-                        <div className="ps-flex" style={{ gap: 8, marginTop: 12 }}>
+                        <div className="ps-flex" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                           <button className="ps-btn-sm" onClick={() => handleUse(v.id, 'won')}>✅ Won</button>
                           <button className="ps-btn-sm" onClick={() => handleUse(v.id, 'lost')}>❌ Lost</button>
                           <button className="ps-btn-sm" onClick={() => handleUse(v.id, 'used')}>📞 Used</button>

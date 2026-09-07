@@ -206,7 +206,7 @@ export default function AutoOptimizationView({ scripts: scriptsProp = EMPTY_SCRI
                 <><Play size={16} /> Run Analysis</>
               )}
             </button>
-            <select className="fsel" value={scriptId} onChange={(e) => setScriptId(e.target.value)} style={{ minWidth: 200 }}>
+            <select className="fsel" value={scriptId} onChange={(e) => setScriptId(e.target.value)} style={{ width: 'auto', flex: 1, maxWidth: 320, minWidth: 200 }}>
               <option value="">Select script to analyze</option>
               {scripts.map((s) => (
                 <option key={s.id} value={s.id}>{s.method || "Script"} · {s.call_type || ""}</option>

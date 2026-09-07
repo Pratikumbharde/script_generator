@@ -243,7 +243,7 @@ export default function VoiceDNA() {
             <>
               {/* Search & filter toolbar */}
               <div className="vdna-toolbar">
-                <div className="dt-search" style={{ flex: 1, minWidth: 0 }}>
+                <div className="dt-search" style={{ flex: 2 }}>
                   <Search size={15} className="dt-search-icon" />
                   <input
                     type="text"
@@ -253,16 +253,16 @@ export default function VoiceDNA() {
                   />
                   {docQuery && <button className="dt-search-clear" onClick={() => setDocQuery('')}><X size={13} /></button>}
                 </div>
-                <select className="fsel" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)} style={{ minWidth: 140 }}>
+                <select className="fsel" value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)} style={{ width: 'auto', minWidth: 140, flexShrink: 0 }}>
                   <option value="all">All types</option>
                   {DOC_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
                 </select>
-                <select className="fsel" value={docSort} onChange={e => setDocSort(e.target.value)} style={{ minWidth: 130 }}>
+                <select className="fsel" value={docSort} onChange={e => setDocSort(e.target.value)} style={{ width: 'auto', minWidth: 130, flexShrink: 0 }}>
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
                   <option value="name">Name A–Z</option>
                 </select>
-                <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{filteredDocs.length} of {docs.length}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 'auto' }}>{filteredDocs.length} of {docs.length}</span>
               </div>
               {filteredDocs.length === 0 ? (
                 <div className="ps-empty" style={{ padding: 24 }}>
@@ -353,7 +353,7 @@ export default function VoiceDNA() {
 
         {/* Section 5: Toggle */}
         <div className="vdna-section" style={{ marginTop: 32 }}>
-          <div className="vdna-toggle-row">
+          <div className="vdna-toggle-row" style={{ flexWrap: 'wrap' }}>
             <div>
               <div className="vdna-toggle-title">Apply Voice DNA to generated scripts</div>
               <div className="vdna-toggle-desc">When enabled, scripts will follow your company's tone, vocabulary, and style. When disabled, scripts use a neutral voice.</div>

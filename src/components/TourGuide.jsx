@@ -199,7 +199,7 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
     <>
       <style>{TOUR_STYLES_PLACEHOLDER}</style>
       <div className="tg-blocker" />
-      {targetless
+      {(targetless || !rect)
         ? <div className="tg-dim" />
         : (
           <div
