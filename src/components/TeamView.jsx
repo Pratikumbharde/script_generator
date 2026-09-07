@@ -88,7 +88,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
     setRoleSaving(userId);
     try {
       await updateTeamRole(userId, newRole);
-      setMembers((prev) => prev.map((m) => m.id === userId ? { ...m, role: newRole } : m));
+      setMembers((prev) => prev.map((m) => m.id === userId ? { ...m, role: newRole, workspace_role: newRole === "admin" ? "owner" : newRole } : m));
       setRoleMenuOpen(null);
     } catch (e) {
       alert(e.message || "Failed to update role");
@@ -200,7 +200,9 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
             <div style={{ display: "grid", gap: 0 }}>
               {displayMembers.map((m) => {
                 const memberId = m.id || m.email;
-                const mRole = m.role || "member";
+                // workspace role (owner/admin/manager/member in THIS workspace),
+                // not the global users.role — the owner must not get a dropdown
+                const mRole = m.workspace_role || m.role || "member";
                 const scriptCount = getScriptCountForMember(memberId);
                 return (
                   <div key={memberId} style={{
