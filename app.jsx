@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from "react";
 import { X } from "lucide-react";
 import LoginView from "./src/components/LoginView.jsx";
+import LandingPage from "./src/components/LandingPage.jsx";
 import ProductsView from "./src/components/ProductsView.jsx";
 import ScriptsView from "./src/components/ScriptsView.jsx";
 import TrainingView from "./src/components/TrainingView.jsx";
@@ -12,6 +13,8 @@ import RolePlayView from "./src/components/RolePlayView.jsx";
 import ScheduledCallsView from "./src/components/ScheduledCallsView.jsx";
 import SettingsView from "./src/components/SettingsView.jsx";
 import AutomationRulesView from "./src/components/AutomationRulesView.jsx";
+import DataExportView from "./src/components/DataExportView.jsx";
+import PermissionsView from "./src/components/PermissionsView.jsx";
 import ABTestingView from "./src/components/ABTestingView.jsx";
 import ProductForm from "./src/components/ProductForm.jsx";
 import ProductDetail from "./src/components/ProductDetail.jsx";
@@ -67,12 +70,17 @@ export default function PitchStudio() {
   const { user, workspace, loading: authLoading, logout, canGenerate } = useAuth();
 
   const [ready, setReady] = useState(false);
+  // Public landing page before auth; 'auth' shows the login/register form.
+  // Password-reset email links (?resetToken=…) skip the landing entirely.
+  const [authScreen, setAuthScreen] = useState(() =>
+    new URLSearchParams(window.location.search).get("resetToken") ? "auth" : "landing"
+  );
   const [company, setCompany] = useState("");
   const [view, setView] = useState(() => {
     // Members default to scripts view
     const saved = localStorage.getItem('ps_view');
     return saved || 'products';
-  }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | coaching | abtesting | selfimprove | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap | voice
+  }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | export | permissions | coaching | abtesting | selfimprove | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap | voice
   // Persist current view so refresh stays on the same page
   useEffect(() => { localStorage.setItem('ps_view', view); }, [view]);
 
@@ -161,7 +169,17 @@ export default function PitchStudio() {
 
   if (!user) return (
     <div className="ps-root"><style>{STYLES}</style>
-      <LoginView />
+      {authScreen === "landing" ? (
+        <LandingPage
+          onSignIn={() => setAuthScreen("auth")}
+          onRegister={() => setAuthScreen("auth-register")}
+        />
+      ) : (
+        <LoginView
+          initialMode={authScreen === "auth-register" ? "register" : "login"}
+          onBack={() => setAuthScreen("landing")}
+        />
+      )}
     </div>
   );
 
@@ -251,6 +269,12 @@ export default function PitchStudio() {
           )}
           {view === "automation" && (
             <AutomationRulesView />
+          )}
+          {view === "export" && (
+            <DataExportView />
+          )}
+          {view === "permissions" && (
+            <PermissionsView />
           )}
           {view === "coaching" && (
             <CoachingInsightsView />

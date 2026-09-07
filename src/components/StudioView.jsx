@@ -27,7 +27,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   // Member view: list of assigned scripts
   if (!canGenerate) {
     return (
-      <>
+      <div className="ps-container">
         <div className="ps-top">
           <div>
             <div className="ps-eyebrow">Workspace</div>
@@ -35,7 +35,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             <div className="ps-sub">Scripts that have been assigned to you by your team lead or manager.</div>
           </div>
         </div>
-        <div className="ps-body" style={{ maxWidth: 900 }}>
+        <div style={{ maxWidth: 900 }}>
           {assignedLoading ? (
             <div className="ps-card" style={{ padding: 40, textAlign: "center" }}>
               <div className="loading-box"><div className="ring" /><div className="msg">Loading your scripts…</div></div>
@@ -103,14 +103,14 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             </div>
           )}
         </div>
-      </>
+      </div>
     );
   }
 
   // No product selected — show product picker
   if (!product) {
     return (
-      <>
+      <div className="ps-container">
         <div className="ps-top">
           <div>
             <div className="ps-eyebrow">Workspace</div>
@@ -118,7 +118,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             <div className="ps-sub">Choose a product to generate scripts and start practicing.</div>
           </div>
         </div>
-        <div className="ps-body" style={{ maxWidth: 900 }}>
+        <div style={{ maxWidth: 900 }}>
           {products.length === 0 ? (
             <div className="ps-empty">
               <div className="big">No products yet</div>
@@ -143,7 +143,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             </div>
           )}
         </div>
-      </>
+      </div>
     );
   }
 
@@ -320,7 +320,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   }
 
   return (
-    <>
+    <div className="ps-container">
       <div className="ps-top">
         <div>
           <div className="crumb" onClick={onBack}>← Products</div>
@@ -329,7 +329,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
           <div className="ps-sub">Set the method, audience, and language. Each unique combination is generated once, then saved.</div>
         </div>
       </div>
-      <div className="ps-body">
+      <div>
         {loading ? (
           <div className="ps-card"><div className="loading-box">
             <div className="ring" />
@@ -526,7 +526,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

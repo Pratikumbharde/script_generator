@@ -24,6 +24,37 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.VITE_OLLAMA_MODEL |
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || ''
 const STT_SERVICE_URL = process.env.STT_SERVICE_URL || 'http://localhost:8001'
 
+/* Robust JSON extraction for AI responses. Thinking models often emit reasoning
+   text (or quote the prompt's JSON template) before the real JSON, so slicing at
+   the first '{' grabs the wrong block. Instead, scan every balanced top-level
+   {...} block (string/escape aware) and try them last-to-first. Throws on failure. */
+function parseAIJSON(raw) {
+  const text = String(raw || '')
+  try { return JSON.parse(text) } catch { /* fall through to scanning */ }
+  const blocks = []
+  let depth = 0, start = -1, inStr = false, esc = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+      continue
+    }
+    if (ch === '"') { inStr = true; continue }
+    if (ch === '{') { if (depth === 0) start = i; depth++ }
+    else if (ch === '}') { if (depth > 0) { depth--; if (depth === 0 && start >= 0) { blocks.push(text.slice(start, i + 1)); start = -1 } } }
+  }
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    try { return JSON.parse(blocks[i]) } catch { /* try next */ }
+  }
+  if (start >= 0) { // unterminated tail — try to close it
+    const tail = text.slice(start) + '}'.repeat(Math.max(depth, 1))
+    try { return JSON.parse(tail) } catch { /* give up */ }
+  }
+  throw new Error('No parseable JSON in AI response')
+}
+
 // System-level SMTP (used for transactional auth emails like password reset,
 // as opposed to the per-user SMTP prefs used for campaign/notification emails)
 const SMTP_HOST = process.env.SMTP_HOST || ''
@@ -45,6 +76,20 @@ function getSystemTransporter() {
     })
   }
   return systemTransporter
+}
+
+// Per-user SMTP (saved via Settings > SMTP Configuration) — fallback for
+// password-reset emails when no system SMTP is configured in .env
+function getUserTransporter(userId) {
+  const prefs = db.prepare('SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure FROM user_preferences WHERE user_id = ?').get(userId)
+  if (!prefs?.smtp_host) return null
+  const transporter = nodemailer.createTransport({
+    host: prefs.smtp_host,
+    port: prefs.smtp_port || 587,
+    secure: prefs.smtp_secure === 1,
+    auth: prefs.smtp_user ? { user: prefs.smtp_user, pass: prefs.smtp_pass || '' } : undefined,
+  })
+  return { transporter, from: prefs.smtp_from || prefs.smtp_user || 'no-reply@pitchstudio.app' }
 }
 
 /* ---------- Multer for file uploads ---------- */
@@ -375,7 +420,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL DEFAULT 'Default',
-    provider TEXT NOT NULL DEFAULT 'ollama' CHECK(provider IN ('ollama','openai','anthropic')),
+    provider TEXT NOT NULL DEFAULT 'ollama' CHECK(provider IN ('ollama','openai','anthropic','deepseek')),
     model TEXT,
     api_key TEXT,
     base_url TEXT,
@@ -796,6 +841,33 @@ addColumnIfNotExists('conversation_heatmaps', 'product_id', 'INTEGER')
 addColumnIfNotExists('conversation_heatmaps', 'win_count', 'INTEGER DEFAULT 0')
 addColumnIfNotExists('conversation_heatmaps', 'loss_count', 'INTEGER DEFAULT 0')
 
+// P11.2b: widen ai_model_accounts.provider CHECK to include deepseek (table rebuild — SQLite cannot ALTER a CHECK)
+{
+  const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_model_accounts'").get()?.sql || ''
+  if (tableSql && !tableSql.includes("'deepseek'")) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE ai_model_accounts_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL DEFAULT 'Default',
+        provider TEXT NOT NULL DEFAULT 'ollama' CHECK(provider IN ('ollama','openai','anthropic','deepseek')),
+        model TEXT,
+        api_key TEXT,
+        base_url TEXT,
+        is_primary INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO ai_model_accounts_new (id, user_id, name, provider, model, api_key, base_url, is_primary, created_at)
+        SELECT id, user_id, name, provider, model, api_key, base_url, is_primary, created_at FROM ai_model_accounts;
+      DROP TABLE ai_model_accounts;
+      ALTER TABLE ai_model_accounts_new RENAME TO ai_model_accounts;
+      COMMIT;
+    `)
+    console.log('Migrated ai_model_accounts: provider now allows deepseek')
+  }
+}
+
 // P9.2b: deal scoring dimensions
 addColumnIfNotExists('deal_scores', 'need_score', 'INTEGER DEFAULT 0')
 addColumnIfNotExists('deal_scores', 'authority_score', 'INTEGER DEFAULT 0')
@@ -828,6 +900,8 @@ addColumnIfNotExists('user_preferences', 'smtp_user', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_pass', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_from', 'TEXT')
 addColumnIfNotExists('user_preferences', 'smtp_secure', 'INTEGER DEFAULT 0')
+addColumnIfNotExists('user_preferences', 'dg_api_key', 'TEXT')
+addColumnIfNotExists('user_preferences', 'dg_model', "TEXT DEFAULT 'nova-2'")
 
 // Voice DNA: toggle setting
 addColumnIfNotExists('user_preferences', 'voice_dna_enabled', 'INTEGER DEFAULT 1')
@@ -1114,17 +1188,43 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   const { email } = req.body
   if (!email) return res.status(400).json({ error: 'Email required' })
 
-  // Always return a generic response so this endpoint can't be used to
-  // enumerate which emails are registered.
-  const genericResponse = { success: true, message: 'If an account exists for that email, a password reset link has been sent.' }
+  // Responses are explicit (per product decision): the user is told whether
+  // the account exists and whether the email actually went out.
+  const mailLog = (status, detail) =>
+    console.log(`[mail:reset] ${new Date().toISOString()} to=${email} status=${status}${detail ? ' — ' + detail : ''}`)
 
   const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email)
-  if (!user) return res.json(genericResponse)
+  if (!user) {
+    mailLog('skipped', 'no account with this email')
+    return res.json({
+      success: false,
+      status: 'no_account',
+      mailSent: false,
+      message: 'No account exists with this email address. Please check the email you entered, or sign up first.',
+    })
+  }
 
-  const transporter = getSystemTransporter()
+  // Prefer system SMTP (.env); fall back to the user's own SMTP saved in Settings
+  let transporter = getSystemTransporter()
+  let smtpSource = 'system (.env)'
+  let fromAddr = SMTP_FROM
   if (!transporter) {
-    console.error('[forgot-password] SMTP_HOST is not configured on the server — cannot send reset email')
-    return res.json(genericResponse)
+    const userTransport = getUserTransporter(user.id)
+    if (userTransport) {
+      transporter = userTransport.transporter
+      fromAddr = userTransport.from
+      smtpSource = 'user settings (SMTP Configuration)'
+    }
+  }
+  if (!transporter) {
+    mailLog('failed', 'no SMTP configured — neither .env nor user Settings > SMTP Configuration')
+    console.error('[forgot-password] No SMTP configured — set SMTP_* in .env or ask the user to fill Settings > SMTP Configuration')
+    return res.json({
+      success: false,
+      status: 'not_configured',
+      mailSent: false,
+      message: 'Email sending is not configured. Ask your administrator to set SMTP in .env, or go to Settings > SMTP Configuration and add your own mail server.',
+    })
   }
 
   const rawToken = crypto.randomBytes(32).toString('hex')
@@ -1136,19 +1236,37 @@ app.post('/api/auth/forgot-password', async (req, res) => {
   const origin = req.get('origin') || `${req.protocol}://${req.get('host')}`
   const resetLink = `${origin}/?resetToken=${rawToken}&email=${encodeURIComponent(user.email)}`
 
+  const logEmail = (status) =>
+    db.prepare('INSERT INTO email_logs (user_id, template, to_email, subject, status) VALUES (?, ?, ?, ?, ?)')
+      .run(user.id, 'forgot_password', user.email, 'Reset your Pitch Studio password', status)
+
   try {
-    await transporter.sendMail({
-      from: SMTP_FROM,
+    const info = await transporter.sendMail({
+      from: fromAddr,
       to: user.email,
       subject: 'Reset your Pitch Studio password',
       text: `We received a request to reset your Pitch Studio password.\n\nSet a new password here (this link expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.`,
       html: `<p>We received a request to reset your Pitch Studio password.</p><p><a href="${resetLink}">Set a new password</a> (this link expires in 1 hour).</p><p>If you didn't request this, you can safely ignore this email.</p>`,
     })
+    mailLog('sent', `via=${smtpSource} messageId=${info?.messageId || 'n/a'} from=${fromAddr}`)
+    logEmail('sent')
+    return res.json({
+      success: true,
+      status: 'sent',
+      mailSent: true,
+      message: `A password reset link has been emailed to ${user.email}. Check your inbox (and spam folder) — the link expires in 1 hour.`,
+    })
   } catch (err) {
+    mailLog('failed', err.message)
     console.error('[forgot-password] Failed to send reset email:', err.message)
+    logEmail('failed')
+    return res.json({
+      success: false,
+      status: 'failed',
+      mailSent: false,
+      message: 'We could not send the email right now. Please try again in a moment, or contact support if it keeps failing.',
+    })
   }
-
-  res.json(genericResponse)
 })
 
 app.post('/api/auth/reset-password', (req, res) => {
@@ -1716,9 +1834,6 @@ app.post('/api/voice-dna/analyze', requireAuth, canGenerate, async (req, res) =>
   const allContent = docs.map(d => `[${d.type}: "${d.name}"]\n${d.content}`).join('\n\n---\n\n')
   const docIds = docs.map(d => d.id)
 
-  const headers = { 'Content-Type': 'application/json' }
-  if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
   const systemPrompt = `You are a brand voice analyst. Given company materials (pitch decks, emails, brand guides, call transcripts, etc.), extract a structured voice profile. Return ONLY valid JSON with these exact fields:
 
 {
@@ -1736,34 +1851,20 @@ app.post('/api/voice-dna/analyze', requireAuth, canGenerate, async (req, res) =>
 Analyze the materials below. Synthesize patterns — do NOT copy content verbatim. Be specific and actionable.`
 
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: allContent.slice(0, 8000) },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: allContent.slice(0, 8000) },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -2040,6 +2141,7 @@ app.put('/api/preferences', requireAuth, (req, res) => {
     theme, email_weekly_digest, email_call_reminders, email_script_alerts,
     ai_provider, ai_model, ai_api_key, ai_base_url,
     smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_secure,
+    dg_api_key, dg_model,
   } = req.body
   const existing = db.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(req.userId)
   if (!existing) {
@@ -2062,6 +2164,8 @@ app.put('/api/preferences', requireAuth, (req, res) => {
     if (smtp_pass !== undefined) { sets.push('smtp_pass = ?'); vals.push(smtp_pass); }
     if (smtp_from !== undefined) { sets.push('smtp_from = ?'); vals.push(smtp_from); }
     if (smtp_secure !== undefined) { sets.push('smtp_secure = ?'); vals.push(smtp_secure ? 1 : 0); }
+    if (dg_api_key !== undefined) { sets.push('dg_api_key = ?'); vals.push(dg_api_key); }
+    if (dg_model !== undefined) { sets.push('dg_model = ?'); vals.push(dg_model); }
     if (sets.length) {
       vals.push(req.userId)
       db.prepare(`UPDATE user_preferences SET ${sets.join(', ')} WHERE user_id = ?`).run(...vals)
@@ -2072,6 +2176,20 @@ app.put('/api/preferences', requireAuth, (req, res) => {
 })
 
 /* ---------- P11.2: AI model accounts ---------- */
+app.get('/api/ai-config', requireAuth, (req, res) => {
+  const cfg = getAIConfigForUser(req.userId)
+  res.json({
+    provider: cfg.provider,
+    model: cfg.model,
+    base_url: cfg.provider === 'openai' ? 'https://api.openai.com'
+      : cfg.provider === 'anthropic' ? 'https://api.anthropic.com'
+      : cfg.provider === 'deepseek' ? (cfg.baseUrl || 'https://api.deepseek.com')
+      : (cfg.baseUrl || OLLAMA_BASE_URL),
+    has_key: !!cfg.apiKey,
+    source: cfg.source,
+  })
+})
+
 app.get('/api/ai-accounts', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT id, name, provider, model, api_key, base_url, is_primary, created_at FROM ai_model_accounts WHERE user_id = ? ORDER BY created_at DESC').all(req.userId)
   res.json({ accounts: rows })
@@ -2080,6 +2198,7 @@ app.get('/api/ai-accounts', requireAuth, (req, res) => {
 app.post('/api/ai-accounts', requireAuth, (req, res) => {
   const { name, provider, model, api_key, base_url } = req.body
   if (!name || !provider) return res.status(400).json({ error: 'name and provider required' })
+  if (!base_url || !String(base_url).trim()) return res.status(400).json({ error: 'Base URL is required' })
   const existingCount = db.prepare('SELECT COUNT(*) as c FROM ai_model_accounts WHERE user_id = ?').get(req.userId)?.c || 0
   const isPrimary = existingCount === 0 ? 1 : 0
   const result = db.prepare(
@@ -2089,10 +2208,63 @@ app.post('/api/ai-accounts', requireAuth, (req, res) => {
   res.json({ account })
 })
 
+/* POST /api/ai/models — list available models from a provider using the
+   supplied credentials (falls back to the user's primary account, then .env). */
+app.post('/api/ai/models', requireAuth, async (req, res) => {
+  try {
+    const { provider, api_key, base_url } = req.body || {}
+    let p = provider
+    let key = api_key
+    let base = base_url
+    if (!p) {
+      const cfg = getAIConfigForUser(req.userId)
+      p = cfg.provider
+      key = key || cfg.apiKey
+      base = base || cfg.baseUrl
+    }
+    const stripSlash = (u) => (u || '').replace(/\/+$/, '')
+    let models = []
+
+    if (p === 'ollama') {
+      const headers = key ? { Authorization: `Bearer ${key}` } : {}
+      const r = await fetch(`${stripSlash(base) || OLLAMA_BASE_URL}/api/tags`, { headers })
+      if (!r.ok) return res.status(r.status).json({ error: `Upstream ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}` })
+      const d = await r.json()
+      models = (d.models || []).map((m) => m.name).filter(Boolean)
+    } else if (p === 'openai') {
+      if (!key) return res.status(400).json({ error: 'API key required to list OpenAI models' })
+      const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } })
+      if (!r.ok) return res.status(r.status).json({ error: `Upstream ${r.status}` })
+      const d = await r.json()
+      models = (d.data || []).map((m) => m.id).filter(Boolean)
+    } else if (p === 'deepseek') {
+      if (!key) return res.status(400).json({ error: 'API key required to list DeepSeek models' })
+      const r = await fetch(`${stripSlash(base) || 'https://api.deepseek.com'}/models`, { headers: { Authorization: `Bearer ${key}` } })
+      if (!r.ok) return res.status(r.status).json({ error: `Upstream ${r.status}` })
+      const d = await r.json()
+      models = (d.data || []).map((m) => m.id).filter(Boolean)
+    } else if (p === 'anthropic') {
+      if (!key) return res.status(400).json({ error: 'API key required to list Anthropic models' })
+      const r = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } })
+      if (!r.ok) return res.status(r.status).json({ error: `Upstream ${r.status}` })
+      const d = await r.json()
+      models = (d.data || []).map((m) => m.id).filter(Boolean)
+    } else {
+      return res.status(400).json({ error: `Unknown provider: ${p}` })
+    }
+
+    res.json({ provider: p, models })
+  } catch (err) {
+    console.error('[ai-models] Error:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.put('/api/ai-accounts/:id', requireAuth, (req, res) => {
   const { name, provider, model, api_key, base_url } = req.body
   const existing = db.prepare('SELECT id FROM ai_model_accounts WHERE id = ? AND user_id = ?').get(req.params.id, req.userId)
   if (!existing) return res.status(404).json({ error: 'Not found' })
+  if (base_url !== undefined && !String(base_url).trim()) return res.status(400).json({ error: 'Base URL is required' })
   const sets = []
   const vals = []
   if (name !== undefined) { sets.push('name = ?'); vals.push(name); }
@@ -2575,44 +2747,27 @@ app.post('/api/v1/scripts/generate', requireApiKey, async (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ? AND user_id = ?').get(product_id, req.userId)
   if (!product) return res.status(404).json({ error: 'Product not found' })
 
-  // Forward to Ollama via existing proxy logic
+  // Forward to the user's primary AI provider
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const methodObj = { name: method, tone: 'Consultative', blurb: method }
     const callTypeObj = { name: call_type }
     const style = `Methodology: ${method}\nCall type: ${call_type}\nDuration: ${duration}m\nLanguage: ${language || 'en'}\nRegion: ${region || 'india'}`
     const corePrompt = `Write a ${duration} minute sales call script for ${product.name}.\n${style}\nProduct: ${product.description || product.one_liner || ''}\nReturn ONLY JSON with opening, toneLevel, toneGuidance, segments array.`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: 'You are an elite sales coach. Output ONLY valid JSON.' },
-          { role: 'user', content: corePrompt },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: 'You are an elite sales coach. Output ONLY valid JSON.' },
+      { role: 'user', content: corePrompt },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -2627,13 +2782,51 @@ app.post('/api/v1/scripts/generate', requireApiKey, async (req, res) => {
       generated_at: Date.now(),
     })
 
-    res.json({ script: parsed, model: OLLAMA_MODEL || 'glm-5.2:cloud' })
+    res.json({ script: parsed, model: ai.model })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 /* ---------- AI chat proxy (multi-provider) ---------- */
+
+function getAIConfigForUser(userId) {
+  const fallback = {
+    provider: 'ollama',
+    model: OLLAMA_MODEL || 'glm-5.2',
+    apiKey: OLLAMA_API_KEY || null,
+    baseUrl: OLLAMA_BASE_URL,
+    source: 'env',
+  }
+
+  if (!userId) return fallback
+
+  // 1. Try primary ai_model_accounts (new multi-account system)
+  const account = db.prepare('SELECT provider, model, api_key, base_url FROM ai_model_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1').get(userId)
+  if (account) {
+    return {
+      provider: account.provider,
+      model: account.model || OLLAMA_MODEL || 'glm-5.2',
+      apiKey: account.api_key || OLLAMA_API_KEY || null,
+      baseUrl: account.base_url || null,
+      source: 'account',
+    }
+  }
+
+  // 2. Fallback to user_preferences (legacy single-config system)
+  const prefs = db.prepare('SELECT ai_provider, ai_model, ai_api_key, ai_base_url FROM user_preferences WHERE user_id = ?').get(userId)
+  if (prefs?.ai_provider) {
+    return {
+      provider: prefs.ai_provider,
+      model: prefs.ai_model || OLLAMA_MODEL || 'glm-5.2',
+      apiKey: prefs.ai_api_key || OLLAMA_API_KEY || null,
+      baseUrl: prefs.ai_base_url || null,
+      source: 'preferences',
+    }
+  }
+
+  return fallback
+}
 
 function getUserChatConfig(req) {
   // Try JWT auth first
@@ -2646,43 +2839,11 @@ function getUserChatConfig(req) {
       userId = decoded.userId
     } catch { /* invalid token — fallback to env defaults */ }
   }
-
-  const fallback = {
-    provider: 'ollama',
-    model: OLLAMA_MODEL || 'glm-5.2',
-    apiKey: OLLAMA_API_KEY || null,
-    baseUrl: OLLAMA_BASE_URL,
-  }
-
-  if (!userId) return fallback
-
-  // 1. Try primary ai_model_accounts (new multi-account system)
-  const account = db.prepare('SELECT provider, model, api_key, base_url FROM ai_model_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1').get(userId)
-  if (account) {
-    return {
-      provider: account.provider,
-      model: account.model || OLLAMA_MODEL || 'glm-5.2',
-      apiKey: account.api_key || OLLAMA_API_KEY || null,
-      baseUrl: account.base_url || OLLAMA_BASE_URL,
-    }
-  }
-
-  // 2. Fallback to user_preferences (legacy single-config system)
-  const prefs = db.prepare('SELECT ai_provider, ai_model, ai_api_key, ai_base_url FROM user_preferences WHERE user_id = ?').get(userId)
-  if (prefs?.ai_provider) {
-    return {
-      provider: prefs.ai_provider,
-      model: prefs.ai_model || OLLAMA_MODEL || 'glm-5.2',
-      apiKey: prefs.ai_api_key || OLLAMA_API_KEY || null,
-      baseUrl: prefs.ai_base_url || OLLAMA_BASE_URL,
-    }
-  }
-
-  return fallback
+  return getAIConfigForUser(userId)
 }
 
 function normalizeChatResponse(provider, upstreamData) {
-  if (provider === 'openai') {
+  if (provider === 'openai' || provider === 'deepseek') {
     const content = upstreamData.choices?.[0]?.message?.content || ''
     return { message: { content } }
   }
@@ -2696,7 +2857,7 @@ function normalizeChatResponse(provider, upstreamData) {
 
 /* Extract text chunk from provider-specific SSE event */
 function extractStreamChunk(provider, data) {
-  if (provider === 'openai') {
+  if (provider === 'openai' || provider === 'deepseek') {
     return data.choices?.[0]?.delta?.content || ''
   }
   if (provider === 'anthropic') {
@@ -2711,23 +2872,46 @@ async function fetchAIModel(cfg, messages, stream = false) {
   let url, headers = { 'Content-Type': 'application/json' }, body
 
   if (cfg.provider === 'openai') {
-    url = 'https://api.openai.com/v1/chat/completions'
+    url = `${(cfg.baseUrl || 'https://api.openai.com').replace(/\/+$/, '')}/v1/chat/completions`
+    headers['Authorization'] = `Bearer ${cfg.apiKey}`
+    body = JSON.stringify({ model: cfg.model, messages, stream })
+  } else if (cfg.provider === 'deepseek') {
+    url = `${(cfg.baseUrl || 'https://api.deepseek.com').replace(/\/+$/, '')}/chat/completions`
     headers['Authorization'] = `Bearer ${cfg.apiKey}`
     body = JSON.stringify({ model: cfg.model, messages, stream })
   } else if (cfg.provider === 'anthropic') {
-    url = 'https://api.anthropic.com/v1/messages'
+    url = `${(cfg.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '')}/v1/messages`
     headers['x-api-key'] = cfg.apiKey
     headers['anthropic-version'] = '2023-06-01'
     const sysMsgs = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n')
     const chatMsgs = messages.filter((m) => m.role !== 'system')
     body = JSON.stringify({ model: cfg.model, max_tokens: 4096, system: sysMsgs || undefined, messages: chatMsgs, stream })
   } else {
-    url = `${cfg.baseUrl}/api/chat`
+    url = `${cfg.baseUrl || OLLAMA_BASE_URL}/api/chat`
     if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`
     body = JSON.stringify({ model: cfg.model, messages, stream, think: false, options: { num_ctx: 16384, num_predict: 16384 } })
   }
 
   return fetch(url, { method: 'POST', headers, body })
+}
+
+/* One-shot completion through the user's primary AI account.
+   Returns { ok, status, provider, model, content, data, error }. */
+async function aiComplete(userId, messages, { model = null, stream = false } = {}) {
+  const cfg = getAIConfigForUser(userId)
+  const useModel = model || cfg.model
+  try {
+    const response = await fetchAIModel({ ...cfg, model: useModel }, messages, stream)
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      return { ok: false, status: response.status, provider: cfg.provider, model: useModel, error: text || `Upstream ${response.status}`, data: null }
+    }
+    const upstreamData = await response.json()
+    const normalized = normalizeChatResponse(cfg.provider, upstreamData)
+    return { ok: true, status: response.status, provider: cfg.provider, model: useModel, content: normalized.message?.content || '', data: normalized }
+  } catch (err) {
+    return { ok: false, status: 500, provider: cfg.provider, model: useModel, error: err.message, data: null }
+  }
 }
 
 app.post('/api/chat', requireAuth, async (req, res) => {
@@ -2833,12 +3017,13 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
 /* ---------- Speech-to-Text (JWT protected) ---------- */
 
 // Helper: call Deepgram API for transcription with diarization
-async function transcribeWithDeepgram(audioBuffer, mimetype, language) {
+// apiKey/model: per-user credentials from user_preferences (falls back to system .env config)
+async function transcribeWithDeepgram(audioBuffer, mimetype, language, apiKey, model) {
   const langMap = { hi: 'hi', mr: 'mr', en: 'en' }
   const deepgramLang = langMap[language] || 'en'
 
   const response = await fetch('https://api.deepgram.com/v1/listen?' + new URLSearchParams({
-    model: 'nova-2',
+    model: model || 'nova-2',
     language: deepgramLang,
     diarize: 'true',
     smart_format: 'true',
@@ -2846,7 +3031,7 @@ async function transcribeWithDeepgram(audioBuffer, mimetype, language) {
   }), {
     method: 'POST',
     headers: {
-      'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+      'Authorization': `Token ${apiKey || DEEPGRAM_API_KEY}`,
       'Content-Type': mimetype || 'audio/webm',
     },
     body: audioBuffer,
@@ -3077,9 +3262,13 @@ app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
     return res.status(400).json({ error: `Unsupported language '${language}'. Supported: ${supported.join(', ')}` })
   }
 
-  if (!DEEPGRAM_API_KEY) {
+  /* Deepgram key resolution: per-user (Settings → AI Models → Speech-to-Text) first,
+     then system .env. */
+  const dgPrefs = db.prepare('SELECT dg_api_key, dg_model FROM user_preferences WHERE user_id = ?').get(req.userId)
+  const dgKey = dgPrefs?.dg_api_key || DEEPGRAM_API_KEY
+  if (!dgKey) {
     return res.status(503).json({
-      error: 'File transcription requires a Deepgram API key. Use "Record Live" (browser speech recognition) or "Type Call Details" instead — no API key needed.',
+      error: 'File transcription requires a Deepgram API key. Add yours in Settings → AI Models → Speech-to-Text, or use "Record Live" (browser speech recognition) or "Type Call Details" instead.',
     })
   }
 
@@ -3087,8 +3276,8 @@ app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
   const mimetype = req.file.mimetype
 
   try {
-    console.log(`[STT] Using Deepgram for language=${language}`)
-    const result = await transcribeWithDeepgram(audioBuffer, mimetype, language)
+    console.log(`[STT] Using Deepgram (${dgPrefs?.dg_api_key ? 'user key' : 'system key'}) for language=${language}`)
+    const result = await transcribeWithDeepgram(audioBuffer, mimetype, language, dgKey, dgPrefs?.dg_model || 'nova-2')
     return res.json(result)
   } catch (err) {
     console.error(`[STT] Deepgram failed: ${err.message}`)
@@ -3118,6 +3307,30 @@ app.post('/api/stt', requireAuth, upload.single('audio'), async (req, res) => {
   //   hint: 'Add DEEPGRAM_API_KEY to .env, or start the VEXYL-STT service.',
   // })
   // ─── END FALLBACK ───
+})
+
+// Test the Deepgram key: per-user setting → request body → system .env
+app.post('/api/deepgram/test', requireAuth, async (req, res) => {
+  try {
+    const prefs = db.prepare('SELECT dg_api_key FROM user_preferences WHERE user_id = ?').get(req.userId)
+    const key = (req.body && req.body.api_key) || prefs?.dg_api_key || DEEPGRAM_API_KEY
+    if (!key) {
+      return res.status(400).json({ ok: false, error: 'No Deepgram API key configured. Add one in Settings → AI Models → Speech-to-Text.' })
+    }
+    const source = (req.body && req.body.api_key) ? 'entered key' : prefs?.dg_api_key ? 'your saved key' : 'system .env key'
+    const r = await fetch('https://api.deepgram.com/v1/projects', {
+      headers: { 'Authorization': `Token ${key}` },
+    })
+    if (!r.ok) {
+      return res.status(200).json({ ok: false, error: `Deepgram rejected ${source} (HTTP ${r.status}). Check the key and try again.` })
+    }
+    const data = await r.json()
+    const proj = (data.projects || [])[0]
+    return res.json({ ok: true, message: `Deepgram key valid (${source})${proj?.name ? ` — project "${proj.name}"` : ''}` })
+  } catch (err) {
+    console.error('[Deepgram Test] Error:', err.message)
+    return res.status(500).json({ ok: false, error: 'Could not reach Deepgram: ' + err.message })
+  }
 })
 
 // ─── FALLBACK: Uncomment when implementing AI speaker diarization ───
@@ -3169,14 +3382,17 @@ app.get('/api/analytics/win-rate-trend', requireAuth, (req, res) => {
 })
 
 app.get('/api/analytics/top-methods', requireAuth, (req, res) => {
+  // prompt_feedback also has method/call_type/outcome columns, so everything
+  // must be table-qualified; DISTINCT keeps the join from inflating counts.
   const rows = db.prepare(`
-    SELECT method, call_type, COUNT(*) as total,
-      SUM(CASE WHEN outcome = 'won' THEN 1 ELSE 0 END) as wins,
-      ROUND(AVG(CASE WHEN rating IS NOT NULL THEN rating END), 1) as avg_rating
+    SELECT scripts.method, scripts.call_type,
+      COUNT(DISTINCT scripts.id) as total,
+      COUNT(DISTINCT CASE WHEN scripts.outcome = 'won' THEN scripts.id END) as wins,
+      ROUND(AVG(CASE WHEN pf.rating IS NOT NULL THEN pf.rating END), 1) as avg_rating
     FROM scripts
     LEFT JOIN prompt_feedback pf ON pf.script_id = scripts.id
     WHERE scripts.user_id = ?
-    GROUP BY method, call_type
+    GROUP BY scripts.method, scripts.call_type
     ORDER BY wins DESC, total DESC
     LIMIT 10
   `).all(req.userId)
@@ -3221,9 +3437,6 @@ app.post('/api/coaching-insights/generate', requireAuth, canGenerate, async (req
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const systemPrompt = `You are an elite sales coach. Analyze the following sales call transcript and return ONLY valid JSON with this exact structure:
 {
   "overall_score": 1-100,
@@ -3254,34 +3467,20 @@ app.post('/api/coaching-insights/generate', requireAuth, canGenerate, async (req
 
 Be specific. Include 2-4 exact_moments with realistic coaching. Make recommended_practice actionable.`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: transcript },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: transcript },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -3341,8 +3540,6 @@ app.post('/api/call-analyses', requireAuth, canGenerate, async (req, res) => {
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
 
     // Build context from script + product if provided
     let scriptContext = ''
@@ -3403,34 +3600,20 @@ Be specific and actionable. Include 3-5 adherence_breakdown items${scriptContext
 
     const userContent = `TRANSCRIPT:\n${transcript}\n${scriptContext}\n${productContext}`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -3700,7 +3883,7 @@ Give 3-5 specific, actionable suggestions based on the data patterns. If data is
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -3751,9 +3934,6 @@ app.post('/api/sentiment/analyze', requireAuth, canGenerate, async (req, res) =>
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const systemPrompt = `You are a sales sentiment analyst. Analyze the following sales call transcript and return ONLY valid JSON with this exact structure:
 {
   "overall_sentiment": -1.0 to 1.0,
@@ -3765,34 +3945,20 @@ app.post('/api/sentiment/analyze', requireAuth, canGenerate, async (req, res) =>
   ]
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: transcript },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: transcript },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4001,7 +4167,19 @@ app.get('/api/workspace/permissions', requireAuth, (req, res) => {
 
 app.get('/api/workspace/permissions/all', requireAuth, requirePermission('can_manage_team'), (req, res) => {
   const rows = db.prepare('SELECT * FROM workspace_permissions WHERE workspace_id = ?').all(req.workspaceId)
-  res.json({ permissions: rows })
+  // Merge in role defaults so workspaces that haven't saved overrides yet still
+  // return all four roles — otherwise the UI can't toggle anything (no row = no-op).
+  const defaults = {
+    owner: { can_generate_scripts: 1, can_edit_products: 1, can_delete_scripts: 1, can_view_analytics: 1, can_manage_team: 1, can_override_prompts: 1, can_export_data: 1 },
+    admin: { can_generate_scripts: 1, can_edit_products: 1, can_delete_scripts: 1, can_view_analytics: 1, can_manage_team: 1, can_override_prompts: 1, can_export_data: 1 },
+    editor: { can_generate_scripts: 1, can_edit_products: 1, can_delete_scripts: 1, can_view_analytics: 1, can_manage_team: 0, can_override_prompts: 0, can_export_data: 0 },
+    viewer: { can_generate_scripts: 0, can_edit_products: 0, can_delete_scripts: 0, can_view_analytics: 1, can_manage_team: 0, can_override_prompts: 0, can_export_data: 0 },
+  }
+  const permissions = ['owner', 'admin', 'editor', 'viewer'].map((role) => {
+    const row = rows.find((r) => r.role === role)
+    return row || { role, ...defaults[role] }
+  })
+  res.json({ permissions })
 })
 
 app.put('/api/workspace/permissions/:role', requireAuth, requirePermission('can_manage_team'), (req, res) => {
@@ -4255,9 +4433,6 @@ app.post('/api/competitor-intel/analyze', requireAuth, canGenerate, async (req, 
   if (!competitor_name || !raw_content) return res.status(400).json({ error: 'competitor_name and raw_content required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const systemPrompt = `You are an elite competitive intelligence analyst. Analyze the following competitor content and return ONLY valid JSON with this exact structure:
 {
   "ai_summary": "brief summary of their positioning and messaging",
@@ -4293,34 +4468,20 @@ app.post('/api/competitor-intel/analyze', requireAuth, canGenerate, async (req, 
   ]
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: raw_content },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: raw_content },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4379,8 +4540,6 @@ app.post('/api/deal-scores/analyze', requireAuth, canGenerate, async (req, res) 
   if (!transcript) return res.status(400).json({ error: 'transcript required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
 
     // Fetch winning patterns for context
     const patterns = db.prepare(`
@@ -4410,34 +4569,20 @@ app.post('/api/deal-scores/analyze', requireAuth, canGenerate, async (req, res) 
   "ai_summary": "2-3 sentence summary"
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Winning patterns: ${JSON.stringify(patterns)}\n\nTranscript:\n${transcript}` },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Winning patterns: ${JSON.stringify(patterns)}\n\nTranscript:\n${transcript}` },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4532,8 +4677,6 @@ app.post('/api/script-refinements/generate', requireAuth, canGenerate, async (re
   if (!script_id || !segments_json) return res.status(400).json({ error: 'script_id and segments_json required' })
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
 
     // Fetch script metadata for denormalization
     const script = db.prepare('SELECT product_id, method, call_type, language, (SELECT name FROM products WHERE id = scripts.product_id) as product_name FROM scripts WHERE id = ? AND user_id = ?').get(script_id, req.userId)
@@ -4578,34 +4721,20 @@ app.post('/api/script-refinements/generate', requireAuth, canGenerate, async (re
   ]
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `${goalHint}\n${focusHint}\nWinning patterns: ${JSON.stringify(patterns)}\n\nCurrent segments JSON:\n${segments_json}` },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `${goalHint}\n${focusHint}\nWinning patterns: ${JSON.stringify(patterns)}\n\nCurrent segments JSON:\n${segments_json}` },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4806,7 +4935,7 @@ Return ONLY valid JSON with these fields:
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4887,9 +5016,6 @@ app.post('/api/heatmaps/generate', requireAuth, async (req, res) => {
   }
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const systemPrompt = `You are a conversation intelligence analyst. Analyze these sales call transcripts and identify phrases that correlate with wins vs losses. Return ONLY valid JSON:
 {
   "phrases": [
@@ -4903,34 +5029,20 @@ app.post('/api/heatmaps/generate', requireAuth, async (req, res) => {
   ]
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: transcripts.join('\n---\n') },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: transcripts.join('\n---\n') },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -4982,7 +5094,16 @@ app.post('/api/conversation-intelligence/analyze-scripts', requireAuth, async (r
     const scriptPayloads = scripts.map((s) => {
       let segments = []
       try { segments = JSON.parse(s.segments_json || '[]') } catch { segments = [] }
-      const text = segments.map((seg) => seg.content || seg.text || '').filter(Boolean).join('\n')
+      /* Segment shape: { label, goal, say: [], ask: [], do: [] } (older shapes may
+         carry content/text/lines). Flatten every spoken line into one text block. */
+      const text = segments.map((seg) => {
+        const parts = [seg.content, seg.text, seg.goal]
+        for (const key of ['say', 'ask', 'do', 'lines', 'points']) {
+          if (Array.isArray(seg[key])) parts.push(...seg[key])
+          else if (typeof seg[key] === 'string') parts.push(seg[key])
+        }
+        return parts.filter((p) => typeof p === 'string' && p.trim()).join(' ')
+      }).filter(Boolean).join('\n')
       return {
         id: s.id,
         product_id: s.product_id,
@@ -4996,9 +5117,11 @@ app.post('/api/conversation-intelligence/analyze-scripts', requireAuth, async (r
     if (scriptPayloads.length === 0) {
       return res.status(400).json({ error: 'Scripts found but segment content is empty.' })
     }
-
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
+    if (scriptPayloads.length < 2) {
+      return res.status(400).json({
+        error: `Only ${scriptPayloads.length} call has an outcome marked, so no win/loss pattern can be found. Mark at least 3 more scripts as Won or Lost in Call Studio (ideally 2+ of each), then analyze again.`
+      })
+    }
 
     const systemPrompt = `You are a conversation intelligence analyst for a sales team. I will provide you with sales script/call content labeled with their outcomes (won or lost).
 
@@ -5034,34 +5157,20 @@ Rules:
       `--- Script ID: ${s.id} | Outcome: ${s.outcome} | Method: ${s.method} | Type: ${s.call_type} ---\n${s.text}`
     ).join('\n\n')
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { raw: generated }
     }
@@ -5172,7 +5281,7 @@ app.get('/api/conversation-intelligence/calls', requireAuth, (req, res) => {
   try {
     const { product_id, outcome } = req.query
     let sql = `
-      SELECT s.id, s.product_id, s.method, s.call_type, s.duration, s.outcome, s.notes, s.created_at, s.saved_at,
+      SELECT s.id, s.product_id, s.method, s.call_type, s.duration, s.outcome, s.notes, s.segments_json, s.created_at, s.saved_at,
         p.name as product_name
       FROM scripts s
       LEFT JOIN products p ON s.product_id = p.id
@@ -5243,35 +5352,19 @@ app.post('/api/chat/sessions/:id/messages', requireAuth, async (req, res) => {
 Help the user with script generation, sales strategy, call preparation, and performance analysis. Be concise and actionable.`
 
   try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user', content },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'user', content },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const aiResponse = data.message?.content || 'I apologize, I could not generate a response.'
-    db.prepare('INSERT INTO chat_messages (session_id, role, content, model_used) VALUES (?, ?, ?, ?)').run(id, 'assistant', aiResponse, OLLAMA_MODEL || 'glm-5.2:cloud')
+    const aiResponse = ai.content || 'I apologize, I could not generate a response.'
+    db.prepare('INSERT INTO chat_messages (session_id, role, content, model_used) VALUES (?, ?, ?, ?)').run(id, 'assistant', aiResponse, ai.model)
 
     const rows = db.prepare('SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC').all(id)
     res.json({ messages: rows })
@@ -5321,9 +5414,6 @@ app.post('/api/smart-alerts/generate', requireAuth, async (req, res) => {
       SELECT COUNT(*) as c FROM scripts WHERE user_id = ? AND saved_at >= ? AND saved_at < ?
     `).get(req.userId, prevWeek, lastWeek)?.c || 0
 
-    const headers = { 'Content-Type': 'application/json' }
-    if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
     const systemPrompt = `You are a sales analytics AI. Based on the user's recent performance data, generate 0-3 smart alerts. Return ONLY valid JSON:
 {
   "alerts": [
@@ -5339,34 +5429,20 @@ app.post('/api/smart-alerts/generate', requireAuth, async (req, res) => {
   ]
 }`
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL || 'glm-5.2:cloud',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `This week: ${currentWins} wins out of ${currentScripts} scripts. Previous week: ${prevWins} wins out of ${prevScripts} scripts.` },
-        ],
-        stream: false,
-      }),
-    })
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `This week: ${currentWins} wins out of ${currentScripts} scripts. Previous week: ${prevWins} wins out of ${prevScripts} scripts.` },
+    ])
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      return res.status(response.status).json({ error: text || `Upstream ${response.status}` })
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: ai.error })
     }
 
-    let data = await response.json()
-    if (data.choices && data.choices[0]?.message?.content) {
-      data = { message: { content: data.choices[0].message.content } }
-    }
-
-    const generated = data.message?.content || ''
+    const generated = ai.content
     let parsed = {}
     try {
       const clean = generated.replace(/```json/gi, '').replace(/```/g, '').trim()
-      parsed = JSON.parse(clean.slice(clean.indexOf('{')))
+      parsed = parseAIJSON(clean)
     } catch (_) {
       parsed = { alerts: [] }
     }
@@ -5410,24 +5486,19 @@ app.put('/api/smart-alerts/:id/dismiss', requireAuth, (req, res) => {
 })
 
 /* ---------- P10.5 multi-model routing ---------- */
-async function routeToModel(taskType, messages, preferredModel = null) {
+async function routeToModel(taskType, messages, preferredModel = null, userId = null) {
+  const cfg = getAIConfigForUser(userId)
   const models = preferredModel
-    ? [preferredModel, 'glm-5.2:cloud', 'glm-5.2']
-    : ['glm-5.2:cloud', 'glm-5.2']
+    ? [preferredModel, cfg.model]
+    : [cfg.model]
+  const uniqueModels = [...new Set(models.filter(Boolean))]
 
   const startTime = Date.now()
   let lastError = ''
 
-  for (const model of models) {
+  for (const model of uniqueModels) {
     try {
-      const headers = { 'Content-Type': 'application/json' }
-      if (OLLAMA_API_KEY) headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`
-
-      const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ model, messages, stream: false }),
-      })
+      const response = await fetchAIModel({ ...cfg, model }, messages, false)
 
       if (!response.ok) {
         const text = await response.text().catch(() => '')
@@ -5435,15 +5506,13 @@ async function routeToModel(taskType, messages, preferredModel = null) {
         continue
       }
 
-      let data = await response.json()
-      if (data.choices && data.choices[0]?.message?.content) {
-        data = { message: { content: data.choices[0].message.content } }
-      }
+      const upstreamData = await response.json()
+      const normalized = normalizeChatResponse(cfg.provider, upstreamData)
 
       return {
         success: true,
         model: model,
-        content: data.message?.content || '',
+        content: normalized.message?.content || '',
         duration_ms: Date.now() - startTime,
       }
     } catch (err) {
@@ -5453,7 +5522,7 @@ async function routeToModel(taskType, messages, preferredModel = null) {
 
   return {
     success: false,
-    model: models[models.length - 1],
+    model: uniqueModels[uniqueModels.length - 1],
     content: '',
     error: lastError,
     duration_ms: Date.now() - startTime,
@@ -5467,7 +5536,7 @@ app.post('/api/chat/route', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'task_type and messages required' })
     }
 
-    const result = await routeToModel(task_type, messages, preferred_model)
+    const result = await routeToModel(task_type, messages, preferred_model, req.userId)
 
     // Log routing decision
     db.prepare(`

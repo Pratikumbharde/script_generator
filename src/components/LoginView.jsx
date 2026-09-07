@@ -26,9 +26,9 @@ function validateCompany(v) {
   return ''
 }
 
-export default function LoginView() {
+export default function LoginView({ initialMode = 'login', onBack }) {
   const { setAuth } = useAuth()
-  const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot' | 'reset'
+  const [mode, setMode] = useState(initialMode) // 'login' | 'register' | 'forgot' | 'reset'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -90,7 +90,11 @@ export default function LoginView() {
       setBusy(true)
       try {
         const data = await forgotPassword(email)
-        setInfo(data.message || 'If an account exists for that email, a password reset link has been sent.')
+        if (data.status === 'sent') {
+          setInfo(data.message || 'A password reset link has been emailed to you. Check your inbox (and spam folder).')
+        } else {
+          setError(data.message || 'Something went wrong while sending the reset email. Please try again.')
+        }
       } catch (err) {
         setError(err.message)
       } finally {
@@ -171,6 +175,11 @@ export default function LoginView() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)' }}>
       <div className="ps-form" style={{ width: '100%', maxWidth: 420, padding: 32 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          {onBack && (
+            <div style={{ textAlign: 'left', marginBottom: 12 }}>
+              <button type="button" className="ps-btn subtle sm" onClick={onBack}>&larr; Back</button>
+            </div>
+          )}
           <div className="ps-brand" style={{ justifyContent: 'center', marginBottom: 8, color: 'var(--ink)' }}>
             <span className="dot" /><span>Pitch Studio</span>
           </div>

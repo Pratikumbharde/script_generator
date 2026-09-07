@@ -102,16 +102,46 @@ export const scriptKey = (pid, o) =>
   `pscript:${pid}:${o.method}:${o.callType}:${o.duration}:${o.language}:${o.region}:${o.delivery}:${o.simple ? "s" : "p"}:${slug(o.persona) || "general"}`;
 
 export function safeParseJSON(raw) {
-  let s = String(raw || "").replace(/```json/gi, "").replace(/```/g, "").trim();
-  const start = s.indexOf("{");
-  if (start > 0) s = s.slice(start);
-  if (start === -1) throw new Error("No JSON found in response.");
-  try { return JSON.parse(s); } catch (_) { /* fall through to repair */ }
+  const s = String(raw || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+  if (!s.includes("{")) throw new Error("No JSON found in response.");
+  try { return JSON.parse(s); } catch (_) { /* fall through */ }
 
-  const safeEnds = [];
-  let inStr = false, esc = false;
+  // Thinking models often emit reasoning text first (which may quote the JSON
+  // shape template) before the real JSON, so scan for ALL balanced top-level
+  // {...} blocks and try them from the LAST one backwards.
+  const blocks = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") { if (depth === 0) start = i; depth++; }
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) { blocks.push(s.slice(start, i + 1)); start = -1; }
+      if (depth < 0) { depth = 0; start = -1; } // stray closer — reset
+    }
+  }
+  if (start !== -1 && depth > 0) blocks.push(s.slice(start)); // unterminated tail (truncated output)
+
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    try { return JSON.parse(blocks[i]); } catch (_) {
+      const repaired = closeOpenStructures(blocks[i]);
+      if (repaired) { try { return JSON.parse(repaired); } catch (_) {} }
+    }
+  }
+
+  // Legacy fallback: slice from first "{" and repair from safe closing positions
+  let s2 = s.slice(s.indexOf("{"));
+  const safeEnds = [];
+  inStr = false; esc = false;
+  for (let i = 0; i < s2.length; i++) {
+    const ch = s2[i];
     if (inStr) {
       if (esc) esc = false;
       else if (ch === "\\") esc = true;
@@ -122,7 +152,7 @@ export function safeParseJSON(raw) {
     else if (ch === "}" || ch === "]") safeEnds.push(i);
   }
   for (let e = safeEnds.length - 1; e >= 0; e--) {
-    const candidate = s.slice(0, safeEnds[e] + 1);
+    const candidate = s2.slice(0, safeEnds[e] + 1);
     const closed = closeOpenStructures(candidate);
     if (closed) { try { return JSON.parse(closed); } catch (_) {} }
   }

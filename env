@@ -1,0 +1,23 @@
+# Ollama Cloud / remote endpoint
+OLLAMA_CLOUD_BASE_URL=http://localhost:11434
+OLLAMA_CLOUD_API_KEY=835c09a4ca064d01adbc23f410dc392b.1R073CbT_0OKmh4sj41ZXeka
+
+
+# Frontend-exposed (not sensitive)
+VITE_OLLAMA_MODEL=glm-5.2:cloud
+
+# Server
+SERVER_PORT=3001
+JWT_SECRET=ps-jwt-secret-change-me-in-production
+
+# Speech-to-Text
+DEEPGRAM_API_KEY=
+STT_SERVICE_URL=http://localhost:8091
+
+# System SMTP (forgot-password emails)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=pravinkute114@gmail.com
+SMTP_PASS=uzdtqwxgjhcrvzpf
+SMTP_FROM=RecruitOS <pravinkute114@gmail.com>

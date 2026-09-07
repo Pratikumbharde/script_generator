@@ -4,31 +4,39 @@ import { exportWorkspaceJSON, exportWorkspaceCSV } from '../api/client.js'
 export default function DataExportView() {
   const [exporting, setExporting] = useState(false)
   const [format, setFormat] = useState('json')
+  const [error, setError] = useState('')
+
+  async function download(res, filename) {
+    if (!res.ok) {
+      // e.g. 403 when the role lacks can_export_data — show the message, don't save a broken file
+      let msg = `Export failed (HTTP ${res.status})`
+      try {
+        const body = await res.json()
+        if (body?.error) msg = body.error
+      } catch { /* not JSON — keep the HTTP status message */ }
+      throw new Error(msg)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   async function handleExport() {
     setExporting(true)
+    setError('')
     try {
+      const stamp = new Date().toISOString().slice(0, 10)
       if (format === 'json') {
-        const res = await exportWorkspaceJSON()
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `pitch-studio-export-${new Date().toISOString().slice(0, 10)}.json`
-        a.click()
-        URL.revokeObjectURL(url)
+        await download(await exportWorkspaceJSON(), `pitch-studio-export-${stamp}.json`)
       } else {
-        const res = await exportWorkspaceCSV()
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `pitch-studio-scripts-${new Date().toISOString().slice(0, 10)}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
+        await download(await exportWorkspaceCSV(), `pitch-studio-scripts-${stamp}.csv`)
       }
     } catch (e) {
-      alert('Export failed: ' + e.message)
+      setError(e.message || 'Export failed')
     } finally {
       setExporting(false)
     }
@@ -58,11 +66,16 @@ export default function DataExportView() {
         <button className="ps-btn pri" onClick={handleExport} disabled={exporting}>
           {exporting ? 'Exporting...' : '⬇ Download Export'}
         </button>
+        {error && (
+          <div className="ps-muted" style={{ marginTop: 12, color: 'var(--danger, #ef4444)' }}>
+            ⚠ {error}
+          </div>
+        )}
       </div>
 
       <div className="ps-card">
         <h3 className="ps-section-title">What's included</h3>
-        <div className="ps-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        <div className="exp-included-grid">
           {[
             { icon: '📦', label: 'Products', json: true, csv: false },
             { icon: '📝', label: 'Scripts', json: true, csv: true },
@@ -72,10 +85,10 @@ export default function DataExportView() {
             { icon: '📅', label: 'Scheduled Calls', json: true, csv: false },
             { icon: '📋', label: 'Audit Logs', json: true, csv: false },
           ].map((item) => (
-            <div key={item.label} className="ps-flex" style={{ gap: 8, alignItems: 'center', fontSize: 13 }}>
+            <div key={item.label} className="exp-item">
               <span>{item.icon}</span>
               <span>{item.label}</span>
-              <span className="ps-muted" style={{ fontSize: 11, marginLeft: 'auto' }}>
+              <span className="ps-muted" style={{ fontSize: 11 }}>
                 {format === 'json' ? (item.json ? '✓' : '—') : (item.csv ? '✓' : '—')}
               </span>
             </div>

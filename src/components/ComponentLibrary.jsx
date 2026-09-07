@@ -20,6 +20,7 @@ export default function ComponentLibrary() {
   const [filter, setFilter] = useState("all");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", type: "opening", content: "", tags: "" });
+  const [errors, setErrors] = useState({});
   const [copied, setCopied] = useState(null);
 
   useEffect(() => { load(); }, []);
@@ -33,11 +34,50 @@ export default function ComponentLibrary() {
     }
   };
 
+  /* ── Validation ── */
+  const validate = (f) => {
+    const errs = {};
+    if (!f.name.trim()) errs.name = "Name is required";
+    else if (f.name.trim().length < 3) errs.name = "Name must be at least 3 characters";
+    if (!f.content.trim()) errs.content = "Content is required";
+    else if (f.content.trim().length < 10) errs.content = "Content must be at least 10 characters";
+    else if (!/[a-zA-Z]/.test(f.content)) errs.content = "Content must contain actual words, not just numbers";
+    const tags = f.tags.trim();
+    if (tags && tags.split(",").some((t) => t.trim() && t.trim().length < 2)) errs.tags = "Each tag needs at least 2 characters";
+    return errs;
+  };
+
+  /* ── Keyboard guards: block digits in text-only fields (Name, Tags) ── */
+  const digitFields = { name: true, tags: true };
+  const handleKeyDown = (field) => (e) => {
+    if (!digitFields[field]) return;
+    if (/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+      setErrors((prev) => ({ ...prev, [field]: "Numbers are not allowed in this field" }));
+      setTimeout(() => setErrors((prev) => (prev[field] === "Numbers are not allowed in this field" ? { ...prev, [field]: undefined } : prev)), 2200);
+    }
+  };
+  /* Sanitizes onChange too, so paste / drag-drop can't sneak digits in */
+  const handleFieldChange = (field, value) => {
+    const clean = digitFields[field] ? value.replace(/[0-9]/g, "") : value;
+    setForm((prev) => ({ ...prev, [field]: clean }));
+    setErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const openCreate = () => {
+    setForm({ name: "", type: "opening", content: "", tags: "" });
+    setErrors({});
+    setCreating(true);
+  };
+
   const save = async () => {
-    if (!form.name.trim() || !form.content.trim()) return;
+    const errs = validate(form);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
     try {
       await createComponent({ ...form, name: form.name.trim(), content: form.content.trim() });
       setForm({ name: "", type: "opening", content: "", tags: "" });
+      setErrors({});
       setCreating(false);
       load();
     } catch (e) {
@@ -80,7 +120,7 @@ export default function ComponentLibrary() {
           <div className="ps-title"><LayoutGrid size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Components</div>
           <div className="ps-sub">Save your best openings, closes, objection handlers, and discovery questions. Reuse them across scripts.</div>
         </div>
-        {!creating && <button className="ps-btn pri" onClick={() => setCreating(true)}>＋ New component</button>}
+        {!creating && <button className="ps-btn pri" onClick={openCreate}>＋ New component</button>}
       </div>
 
       <div className="ps-body">
@@ -100,7 +140,16 @@ export default function ComponentLibrary() {
             <div className="frow two">
               <div>
                 <label className="flab">Name<span className="req">*</span></label>
-                <LimitedInput className="finp" maxLength={200} placeholder="e.g. Warm intro for SaaS" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <LimitedInput
+                  className="finp"
+                  maxLength={200}
+                  placeholder="e.g. Warm intro for SaaS"
+                  value={form.name}
+                  onChange={(e) => handleFieldChange("name", e.target.value)}
+                  onKeyDown={handleKeyDown("name")}
+                  style={errors.name ? { borderColor: "#B23237" } : undefined}
+                />
+                {errors.name && <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.name}</div>}
               </div>
               <div>
                 <label className="flab">Type<span className="req">*</span></label>
@@ -111,15 +160,33 @@ export default function ComponentLibrary() {
             </div>
             <div className="frow">
               <label className="flab">Content<span className="req">*</span></label>
-              <LimitedTextarea className="ftext" maxLength={2000} placeholder="Write the exact line you'd say on a call…" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+              <LimitedTextarea
+                className="ftext"
+                maxLength={2000}
+                placeholder="Write the exact line you'd say on a call…"
+                value={form.content}
+                onChange={(e) => handleFieldChange("content", e.target.value)}
+                style={errors.content ? { borderColor: "#B23237" } : undefined}
+              />
+              {errors.content && <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.content}</div>}
             </div>
             <div className="frow">
               <label className="flab">Tags <span className="opt">(comma-separated, optional)</span></label>
-              <LimitedInput className="finp" maxLength={500} placeholder="saas, enterprise, friendly" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+              <LimitedInput
+                className="finp"
+                maxLength={500}
+                placeholder="saas, enterprise, friendly"
+                value={form.tags}
+                onChange={(e) => handleFieldChange("tags", e.target.value)}
+                onKeyDown={handleKeyDown("tags")}
+                style={errors.tags ? { borderColor: "#B23237" } : undefined}
+              />
+              {errors.tags && <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.tags}</div>}
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="ps-btn pri" disabled={!form.name.trim() || !form.content.trim()} onClick={save}>Save component</button>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button className="ps-btn pri" disabled={Object.keys(validate(form)).length > 0} onClick={save}>Save component</button>
               <button className="ps-btn ghost" onClick={() => setCreating(false)}>Cancel</button>
+              {Object.keys(validate(form)).length > 0 && <span style={{ fontSize: 12, color: "var(--muted)" }}>Fill the required fields to save</span>}
             </div>
           </div>
         )}
@@ -129,7 +196,7 @@ export default function ComponentLibrary() {
           <div className="ps-empty">
             <div className="big">No components yet</div>
             <p>Save reusable snippets from your best scripts — openings, closes, objection rebuttals, and more.</p>
-            <button className="ps-btn pri" onClick={() => setCreating(true)}>＋ Create your first component</button>
+            <button className="ps-btn pri" onClick={openCreate}>＋ Create your first component</button>
           </div>
         ) : (
           <div className="comp-grid">

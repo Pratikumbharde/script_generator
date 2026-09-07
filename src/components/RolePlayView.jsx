@@ -7,6 +7,12 @@ import {
   DIFFICULTY_LEVELS, RP_SCORE_DIMENSIONS
 } from "../data/constants.js";
 
+/* BCP-47 tags for the Web Speech API recognizer, keyed by app language id */
+const SR_LANGS = {
+  en: "en-US", hinglish: "hi-IN", hi: "hi-IN", mr: "mr-IN", ta: "ta-IN",
+  te: "te-IN", bn: "bn-IN", gu: "gu-IN", kn: "kn-IN", pa: "pa-IN",
+};
+
 /* ============================================================
    AI Role-play Simulator (P9)
    Full sales-training experience:
@@ -42,6 +48,7 @@ export default function RolePlayView({ products }) {
   const bottomRef = useRef(null);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
+  const keepListeningRef = useRef(false);
 
   /* ── Helpers ── */
   const selectedPersona = BUYER_PERSONAS.find((p) => p.id === buyerPersonaId);
@@ -268,24 +275,49 @@ Evaluate.`;
     }
   };
 
-  /* ── Speech ── */
+  /* ── Speech (browser Web Speech API) ── */
   const startListening = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { console.warn("Speech recognition not supported in this browser"); return; }
+    if (!SR) { setError("Speech recognition is not supported in this browser — use Chrome or Edge, or type your response."); return; }
     const rec = new SR();
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = language === "en" ? "en-US" : "en-US";
+    /* Match the role-play language (hinglish → hi-IN handles mixed speech best) */
+    rec.lang = SR_LANGS[language] || "en-US";
     rec.onresult = (e) => {
       const transcript = Array.from(e.results).map((r) => r[0].transcript).join(" ");
       setInput(transcript);
     };
-    rec.onerror = () => setIsListening(false);
-    rec.onend = () => setIsListening(false);
+    rec.onerror = (event) => {
+      if (event.error === "aborted") return;
+      if (event.error === "no-speech" || event.error === "network") return; /* onend restarts it */
+      if (event.error === "not-allowed") {
+        keepListeningRef.current = false;
+        setError("Microphone access denied. Allow mic permission for this site and try again.");
+      }
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    rec.onend = () => {
+      /* Chrome auto-ends recognition after a pause — restart while the mic toggle is on */
+      if (keepListeningRef.current) {
+        try {
+          rec.start();
+        } catch {
+          setTimeout(() => {
+            if (keepListeningRef.current) { try { rec.start(); } catch (_) {} }
+          }, 300);
+        }
+        return;
+      }
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
     recognitionRef.current = rec;
-    try { rec.start(); setIsListening(true); } catch (_) {}
+    try { keepListeningRef.current = true; rec.start(); setIsListening(true); } catch (_) { keepListeningRef.current = false; }
   };
   const stopListening = () => {
+    keepListeningRef.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (_) {}
       recognitionRef.current = null;

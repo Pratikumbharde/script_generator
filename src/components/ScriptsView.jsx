@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { S, nameOf, parseScriptKey, scriptKey, generateScript } from "../utils/helpers.js";
 import { METHODS, CALL_TYPES, LANGUAGES, REGIONS, DELIVERY } from "../data/constants.js";
-import { reorderScripts, updateScript } from "../api/client.js";
-import { Search, List, LayoutGrid, SlidersHorizontal, Columns, MoreHorizontal, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, FileText, Copy, Trash2, Sparkles, Globe, ChevronLeft, ChevronRight, Inbox, GripVertical } from "lucide-react";
+import { reorderScripts, updateScript, listScripts } from "../api/client.js";
+import { Search, List, LayoutGrid, SlidersHorizontal, Columns, MoreHorizontal, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, X, FileText, Copy, Download, Trash2, Sparkles, Globe, ChevronLeft, ChevronRight, Inbox, GripVertical, AlertTriangle } from "lucide-react";
 import { useOutsideClick, useDropdownPos } from "./shared/DropdownHooks.js";
 
 /* ============================================================
@@ -25,6 +25,71 @@ const COLUMNS_DEF = [
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+/* Copy text to the clipboard with a fallback for insecure contexts
+   (e.g. http://LAN-IP access, where navigator.clipboard is undefined). */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to fallback */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+/* Builds tab-separated text (pastes into Excel/Sheets as columns).
+   One row per script: header line first. */
+function buildExportText(recs, productName) {
+  const clean = (v) => String(v == null ? "" : v).replace(/[\t\n\r]+/g, " ").trim();
+  const header = ["Product", "Method", "Call Type", "Duration (min)", "Language", "Region", "Delivery", "Persona", "Campaign", "Outcome", "Last Updated", "Notes"];
+  const lines = recs.map((r) => {
+    const m = r.meta || {};
+    const updated = r.savedAt > 0
+      ? new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+      : "";
+    return [productName(m), nameOf(METHODS, m.method), nameOf(CALL_TYPES, m.callType), m.duration, nameOf(LANGUAGES, m.language), nameOf(REGIONS, m.region), nameOf(DELIVERY, m.delivery) + (m.simple ? " · simple" : ""), m.persona || "", r.campaign || "", r.outcome || "pending", updated, r.notes || ""].map(clean).join("\t");
+  });
+  return [header.join("\t"), ...lines].join("\n");
+}
+
+/* Downloads the selected scripts as a .csv file (opens in Excel). */
+function downloadExport(recs, productName) {
+  const clean = (v) => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim();
+  const esc = (v) => { const c = clean(v); return /[",]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c; };
+  const header = ["Product", "Method", "Call Type", "Duration (min)", "Language", "Region", "Delivery", "Persona", "Campaign", "Outcome", "Last Updated", "Notes"];
+  const lines = recs.map((r) => {
+    const m = r.meta || {};
+    const updated = r.savedAt > 0
+      ? new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+      : "";
+    return [productName(m), nameOf(METHODS, m.method), nameOf(CALL_TYPES, m.callType), m.duration, nameOf(LANGUAGES, m.language), nameOf(REGIONS, m.region), nameOf(DELIVERY, m.delivery) + (m.simple ? " · simple" : ""), m.persona || "", r.campaign || "", r.outcome || "pending", updated, r.notes || ""].map(esc).join(",");
+  });
+  const csv = "﻿" + [header.join(","), ...lines].join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  a.href = url;
+  a.download = `scripts-export-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
 
 const OUTCOMES = [
   { id: "won", label: "Won", color: "ok" },
@@ -92,6 +157,7 @@ function SortIcon({ dir }) {
 
 export default function ScriptsView({ products, teamLanguages = [], onOpen, onVariant, onGoStudio }) {
   const [rows, setRows] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [filters, setFilters] = useUrlState();
   const [confirmDel, setConfirmDel] = useState(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
@@ -124,17 +190,25 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
   const [page, setPage] = useState(1);
 
   const load = async () => {
-    const keys = await S.listKeys("pscript:");
-    const out = [];
-    for (const k of keys) {
-      const rec = await S.get(k);
-      if (!rec || !rec.data) continue;
-      const meta = rec.meta || parseScriptKey(k);
-      out.push({ key: k, savedAt: rec.savedAt || 0, meta, outcome: rec.outcome || "pending", sort_order: rec.sort_order || 0, campaign: rec.campaign || null });
+    try {
+      setLoadError("");
+      const scripts = await listScripts();
+      const out = scripts.map((rec) => ({
+        key: rec.key || scriptKey(rec.meta?.productId ?? rec.product_id, rec.meta || parseScriptKey(rec.key || "")),
+        savedAt: rec.savedAt || rec.saved_at || 0,
+        meta: rec.meta || {},
+        outcome: rec.outcome || "pending",
+        sort_order: rec.sort_order || 0,
+        campaign: rec.campaign || null,
+        notes: rec.notes || "",
+        usedAt: rec.used_at || null,
+      }));
+      out.sort((a, b) => b.savedAt - a.savedAt);
+      setRows(out);
+      setSelected(new Set());
+    } catch (e) {
+      setLoadError(e.message || "Failed to load scripts.");
     }
-    out.sort((a, b) => b.savedAt - a.savedAt);
-    setRows(out);
-    setSelected(new Set());
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { setPage(1); }, [filters, kpiFilter]);
@@ -518,10 +592,10 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                     </button>
                     <button className="dt-dropdown-item" onClick={(e) => {
                       e.stopPropagation();
-                      const text = `${productName(m)} | ${nameOf(METHODS, m.method)} | ${nameOf(CALL_TYPES, m.callType)} | ${m.duration}m | ${nameOf(LANGUAGES, m.language)} | Outcome: ${r.outcome || "pending"} | Updated: ${updated}`;
-                      navigator.clipboard.writeText(text);
-                      setCopyToast("Details copied!");
-                      setTimeout(() => setCopyToast(null), 2000);
+                      copyText(buildExportText([r], productName)).then((ok) => {
+                        setCopyToast(ok ? "Details copied!" : "Couldn't copy to clipboard");
+                        setTimeout(() => setCopyToast(null), 2000);
+                      });
                       setActiveDropdown(null);
                     }}>
                       <Copy size={14} /> Copy details
@@ -704,9 +778,21 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
       </div>
       <div className="ps-body">
         {rows === null ? (
-          <>
-            {renderSkeleton()}
-          </>
+          loadError ? (
+            <div className="ds-empty-state">
+              <div className="icon"><AlertTriangle size={24} /></div>
+              <h3>Couldn't load scripts</h3>
+              <p>{loadError}</p>
+              <div className="actions">
+                <button className="ds-btn-pri" onClick={load}>Retry</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="loading-box" style={{ marginBottom: 14 }}><div className="ring" /><div className="msg">Loading scripts…</div></div>
+              {renderSkeleton()}
+            </>
+          )
         ) : rows.length === 0 ? (
           <div className="ds-empty-state">
             <div className="icon"><Inbox size={24} /></div>
@@ -836,15 +922,16 @@ export default function ScriptsView({ products, teamLanguages = [], onOpen, onVa
                 <span className="dt-bulk-count">{selected.size} selected</span>
                 <div className="dt-bulk-actions">
                   <button className="dt-bulk-btn" onClick={() => {
-                    const lines = filtered.filter((r) => selected.has(r.key)).map((r) => {
-                      const m = r.meta;
-                      return `${productName(m)} | ${nameOf(METHODS, m.method)} | ${nameOf(CALL_TYPES, m.callType)} | ${m.duration}m | ${nameOf(LANGUAGES, m.language)} | Outcome: ${r.outcome || "pending"}`;
-                    }).join("\n");
-                    navigator.clipboard.writeText(lines);
-                    setCopyToast("Details copied!");
-                    setTimeout(() => setCopyToast(null), 2000);
+                    const recs = filtered.filter((r) => selected.has(r.key));
+                    try {
+                      downloadExport(recs, productName);
+                      setCopyToast(`Exported ${recs.length} script${recs.length === 1 ? "" : "s"} to CSV`);
+                    } catch {
+                      setCopyToast("Export failed — try again");
+                    }
+                    setTimeout(() => setCopyToast(null), 2500);
                   }}>
-                    <Copy size={14} /> Export
+                    <Download size={14} /> Export
                   </button>
                   {bulkMissingCount > 0 && teamLanguages.length > 1 && (
                     <button className="dt-bulk-btn" onClick={() => setConfirmSync("bulk")} disabled={!!syncing}>

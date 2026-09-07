@@ -1,0 +1,16 @@
+﻿const Database = require('D:/office/script_generator/node_modules/better-sqlite3');
+const db = new Database('D:/office/script_generator/database.sqlite');
+const uid = 5;
+const prod = db.prepare('SELECT id FROM products WHERE user_id = ? LIMIT 1').get(uid);
+const pid = prod ? prod.id : null;
+const insP = db.prepare('INSERT INTO conversation_heatmaps (user_id, phrase, category, win_correlation, loss_correlation, usage_count, win_count, loss_count, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'))');
+insP.run(uid, 'Let me walk you through the budget breakdown', 'discovery', 0.72, -0.1, 14, 10, 2, 'manual');
+insP.run(uid, 'Most teams in your space start with the starter plan', 'value_prop', 0.55, -0.3, 9, 5, 3, 'manual');
+insP.run(uid, 'I completely understand your concern about pricing', 'objection', -0.4, 0.6, 11, 3, 7, 'manual');
+insP.run(uid, 'Can we schedule a follow-up next Tuesday?', 'closing', 0.8, -0.5, 6, 5, 1, 'manual');
+insP.run(uid, 'Our onboarding team handles everything for you', 'rapport', 0.3, 0.1, 8, 4, 3, 'manual');
+const insS = db.prepare('INSERT INTO scripts (user_id, product_id, method, call_type, duration, outcome, saved_at, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\', \'-1 day\'), datetime(\'now\', \'-1 day\'))');
+insS.run(uid, pid, 'SPIN', 'Discovery', 20, 'won');
+insS.run(uid, pid, 'MEDDIC', 'Demo', 30, 'lost');
+insS.run(uid, pid, 'SPIN', 'Demo', 25, 'won');
+console.log('seeded user', uid);

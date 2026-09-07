@@ -265,7 +265,8 @@ export default function Sidebar({ view, setView, active, company, workspace, use
                 </span>
                 {!collapsed && <span className="es-group-label">{group.label}</span>}
               </button>
-              {(!collapsed && expandedGroups.has(group.id)) && (
+              {/* Collapsed mode shows all groups' icons; expanded mode respects toggle */}
+              {(collapsed || expandedGroups.has(group.id)) && (
                 <div className="es-section-items">
                   {group.items.map((item) => (
                     <button
@@ -273,6 +274,7 @@ export default function Sidebar({ view, setView, active, company, workspace, use
                       className={`es-nav-item ${view === item.id ? "es-active" : ""}`}
                       onClick={() => navigateTo(item.id)}
                       aria-current={view === item.id ? "page" : undefined}
+                      title={collapsed ? item.label : undefined}
                     >
                       <span className="es-nav-icon"><NavIcon id={item.id} /></span>
                       <span className="es-nav-label">{item.label}</span>

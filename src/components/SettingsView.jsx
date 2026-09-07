@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   getPreferences,
   updatePreferences,
+  getAiConfig,
   listAiAccounts,
   createAiAccount,
   updateAiAccount,
@@ -13,6 +14,8 @@ import {
   deleteEmailTemplate,
   duplicateEmailTemplate,
   testSmtp,
+  fetchAiModels,
+  testDeepgram,
 } from "../api/client.js";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
@@ -32,22 +35,26 @@ import {
   Send,
   Lock,
   Settings,
+  AudioLines,
 } from "lucide-react";
 
 const PROVIDERS = [
-  { id: "ollama", label: "Ollama", placeholder: "glm-5.2", basePlaceholder: "http://localhost:11434" },
-  { id: "openai", label: "OpenAI", placeholder: "gpt-4o", basePlaceholder: "https://api.openai.com" },
-  { id: "anthropic", label: "Anthropic", placeholder: "claude-sonnet-5", basePlaceholder: "https://api.anthropic.com" },
+  { id: "ollama", label: "Ollama", placeholder: "glm-5.2", basePlaceholder: "http://localhost:11434", hint: "Local or Ollama Cloud endpoint. Base URL required for local; cloud uses your API key." },
+  { id: "anthropic", label: "Claude (Anthropic)", placeholder: "claude-sonnet-5", basePlaceholder: "https://api.anthropic.com", hint: "Uses your Anthropic API key (sk-ant-…)." },
+  { id: "deepseek", label: "DeepSeek", placeholder: "deepseek-chat", basePlaceholder: "https://api.deepseek.com", hint: "Uses your DeepSeek API key. Models: deepseek-chat, deepseek-reasoner." },
+  { id: "openai", label: "OpenAI", placeholder: "gpt-4o", basePlaceholder: "https://api.openai.com", hint: "Uses your OpenAI API key (sk-…)." },
 ];
 
 const PROVIDER_COLORS = {
   ollama: { bg: "#F2F5FA", border: "#D9E0E9", text: "#667180" },
   openai: { bg: "#EDF9F2", border: "#D0E9DE", text: "#1A7F5B" },
   anthropic: { bg: "#F7F8FC", border: "#D9DEEE", text: "#2B4CF0" },
+  deepseek: { bg: "#F0F4FF", border: "#C7D5FB", text: "#3B5BDB" },
 };
 
 export default function SettingsView() {
   const [prefs, setPrefs] = useState(null);
+  const [aiConfig, setAiConfig] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +66,25 @@ export default function SettingsView() {
   const [editingAiId, setEditingAiId] = useState(null);
   const [editingTplId, setEditingTplId] = useState(null);
   const [aiForm, setAiForm] = useState({ name: "", provider: "ollama", model: "", api_key: "", base_url: "" });
+  const [aiModels, setAiModels] = useState([]);
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiModelsError, setAiModelsError] = useState("");
+  const [dgTesting, setDgTesting] = useState(false);
+  const [dgStatus, setDgStatus] = useState(null);
   const [tplForm, setTplForm] = useState({ name: "", slug: "", subject: "", body: "", description: "", variables: "", active: 1 });
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return localStorage.getItem("ps_settings_tab") || "general"; } catch { return "general"; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("ps_settings_tab", activeTab); } catch { /* noop */ }
+  }, [activeTab]);
+
+  const SETTINGS_TABS = [
+    { id: "general", label: "General", icon: Settings },
+    { id: "email", label: "Email", icon: Mail },
+    { id: "ai", label: "AI Models", icon: Cpu },
+  ];
 
   useEffect(() => {
     loadAll();
@@ -68,12 +93,14 @@ export default function SettingsView() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [p, accs, tpls] = await Promise.all([
+      const [p, cfg, accs, tpls] = await Promise.all([
         getPreferences().catch(() => null),
+        getAiConfig().catch(() => null),
         listAiAccounts().catch(() => []),
         listEmailTemplates().catch(() => []),
       ]);
       setPrefs(p);
+      setAiConfig(cfg);
       setAccounts(accs || []);
       setTemplates(tpls || []);
       if (p?.theme) {
@@ -104,25 +131,50 @@ export default function SettingsView() {
   };
 
   /* ── AI Account CRUD ── */
+  /* Fetch the provider's model list using the credentials entered in the form.
+     Falls back server-side to the user's primary account, then .env. */
+  const loadAiModels = async (form) => {
+    const f = form || aiForm;
+    setAiModelsLoading(true);
+    setAiModelsError("");
+    try {
+      const res = await fetchAiModels({ provider: f.provider, api_key: f.api_key || undefined, base_url: f.base_url || undefined });
+      const models = res.models || [];
+      setAiModels(models);
+      if (!f.model && models.length) {
+        const pick = f.provider === "ollama" ? (models.find((m) => m.endsWith(":cloud")) || models[0]) : models[0];
+        setAiForm((prev) => ({ ...prev, model: pick }));
+      }
+    } catch (e) {
+      setAiModels([]);
+      setAiModelsError(e.message || "Could not fetch models — enter the model name manually.");
+    } finally {
+      setAiModelsLoading(false);
+    }
+  };
   const openAddAi = () => {
     setEditingAiId(null);
-    setAiForm({ name: "", provider: "ollama", model: "", api_key: "", base_url: "" });
+    const fresh = { name: "", provider: "ollama", model: "", api_key: "", base_url: PROVIDERS.find((p) => p.id === "ollama")?.basePlaceholder || "" };
+    setAiForm(fresh);
     setShowAiForm(true);
+    loadAiModels(fresh);
   };
   const openEditAi = (acc) => {
     setEditingAiId(acc.id);
-    setAiForm({
+    const f = {
       name: acc.name || "",
       provider: acc.provider || "ollama",
       model: acc.model || "",
       api_key: acc.api_key || "",
       base_url: acc.base_url || "",
-    });
+    };
+    setAiForm(f);
     setShowAiForm(true);
+    loadAiModels(f);
   };
   const closeAiForm = () => { setShowAiForm(false); setEditingAiId(null); };
   const submitAiForm = async () => {
-    if (!aiForm.name.trim()) return;
+    if (!aiForm.name.trim() || !aiForm.base_url.trim()) return;
     setSaving(true);
     try {
       if (editingAiId) await updateAiAccount(editingAiId, aiForm);
@@ -170,6 +222,20 @@ export default function SettingsView() {
       setAiTestStatus((s) => ({ ...s, [acc.id]: { ok: true, msg: `Connected. Response: "${text.slice(0, 50)}${text.length > 50 ? "…" : ""}"` } }));
     } catch (e) {
       setAiTestStatus((s) => ({ ...s, [acc.id]: { ok: false, msg: e.message || "Connection failed." } }));
+    }
+  };
+
+  /* ── Deepgram (Speech-to-Text) ── */
+  const testDg = async () => {
+    setDgTesting(true);
+    setDgStatus(null);
+    try {
+      const res = await testDeepgram();
+      setDgStatus({ ok: !!res.ok, msg: res.ok ? (res.message || "Key valid") : (res.error || "Key rejected") });
+    } catch (e) {
+      setDgStatus({ ok: false, msg: e.message || "Could not reach Deepgram." });
+    } finally {
+      setDgTesting(false);
     }
   };
 
@@ -240,10 +306,30 @@ export default function SettingsView() {
         <div>
           <div className="ps-eyebrow">P6</div>
           <div className="ps-title"><Settings size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Settings</div>
-          <div className="ps-sub">Manage your theme, notifications, AI model accounts, SMTP, and email templates.</div>
+          <div className="ps-sub">Manage your appearance, notifications, email (SMTP + templates), and AI model accounts.</div>
         </div>
       </div>
       <div className="ps-body">
+        {/* Tab bar */}
+        <div className="st-tabs" role="tablist" aria-label="Settings sections">
+          {SETTINGS_TABS.map((tab) => {
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className={`st-tab ${activeTab === tab.id ? "st-active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <TabIcon size={15} /> {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "general" && (
+        <>
         {/* Theme */}
         <div className="ai-section" style={{ marginBottom: 18 }}>
           <div className="ai-section-h">🎨 Appearance</div>
@@ -280,6 +366,11 @@ export default function SettingsView() {
           </div>
         </div>
 
+        </>
+        )}
+
+        {activeTab === "email" && (
+        <>
         {/* ── SMTP Configuration ── */}
         <div className="ai-section" style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -288,7 +379,7 @@ export default function SettingsView() {
             </div>
           </div>
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.55 }}>
-            Configure your outgoing mail server so the app can send email notifications, call reminders, and workspace invites.
+            Configure your outgoing mail server so the app can send email notifications, call reminders, and workspace invites. If no system-wide SMTP is set by the admin, these credentials are also used to deliver password-reset emails. Use "Test SMTP" to verify before saving important changes.
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, marginBottom: 14 }}>
@@ -430,6 +521,11 @@ export default function SettingsView() {
           })()}
         </div>
 
+        </>
+        )}
+
+        {activeTab === "ai" && (
+        <>
         {/* ── AI Model Accounts ── */}
         <div className="ai-section" style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -444,6 +540,19 @@ export default function SettingsView() {
             Add multiple AI provider accounts. The app will use the <b>primary</b> account for all generation tasks.
           </div>
 
+          {aiConfig && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14, padding: "10px 14px", borderRadius: 10, background: "var(--accent-bg, #F0F4FF)", border: "1px solid rgba(43,76,240,.15)", fontSize: 13 }}>
+              <Zap size={14} style={{ color: "#2B4CF0", flexShrink: 0 }} />
+              <span>
+                Active provider: <b>{PROVIDERS.find((p) => p.id === aiConfig.provider)?.label || aiConfig.provider}</b>
+                {aiConfig.model && <> · model <b>{aiConfig.model}</b></>}
+                {" · "}
+                {aiConfig.source === "account" ? "from your primary account" : aiConfig.source === "preferences" ? "from legacy preferences" : "from server environment (.env fallback)"}
+                {aiConfig.source === "env" && accounts.length > 0 && " — set an account as primary to override"}
+              </span>
+            </div>
+          )}
+
           {accounts.length === 0 ? (
             <div className="ds-empty-state" style={{ padding: 28 }}>
               <div className="icon"><Cpu size={22} /></div>
@@ -452,7 +561,7 @@ export default function SettingsView() {
               <div className="actions"><button className="ds-btn-pri" onClick={openAddAi}><Plus size={14} /> Add Account</button></div>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 12, alignItems: "stretch" }}>
               {accounts.map((acc) => {
                 const colors = PROVIDER_COLORS[acc.provider] || PROVIDER_COLORS.ollama;
                 const status = aiTestStatus[acc.id];
@@ -474,8 +583,8 @@ export default function SettingsView() {
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                         {!acc.is_primary && <button className="ps-btn-sm" onClick={() => handleSetPrimaryAi(acc.id)} title="Set as primary"><Star size={13} /> Set Primary</button>}
+                        <button className="ps-btn-sm" onClick={() => testAiAccount(acc)} title="Test connection"><Zap size={13} /> Test</button>
                         <button className="ps-btn-ghost" onClick={() => openEditAi(acc)} title="Edit"><Pencil size={14} /></button>
-                        <button className="ps-btn-ghost" onClick={() => testAiAccount(acc)} title="Test connection"><Zap size={14} /></button>
                         <button className="ps-btn-ghost danger" onClick={() => handleDeleteAi(acc.id)} title="Delete"><Trash2 size={14} /></button>
                       </div>
                     </div>
@@ -491,9 +600,61 @@ export default function SettingsView() {
             </div>
           )}
         </div>
-      </div>
+        {/* ── Speech-to-Text (Deepgram) ── */}
+        <div className="ai-section" style={{ marginTop: 18 }}>
+          <div className="ai-section-h" style={{ marginBottom: 14 }}>
+            <AudioLines size={16} style={{ verticalAlign: "-3px", marginRight: 6 }} />Speech-to-Text — Deepgram
+          </div>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.55 }}>
+            Used to transcribe <b>uploaded call audio</b> in Call Analysis (with speaker separation).
+            Your key is tried first; the server's .env key is the fallback. "Record Live" and "Type Call Details" need no key.
+          </div>
 
-      {/* ── AI Account Modal ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 2fr) minmax(160px, 1fr)", gap: 12, alignItems: "start" }}>
+            <div>
+              <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>API Key</label>
+              <LimitedInput
+                className="finp"
+                maxLength={200}
+                type="password"
+                placeholder="Paste your Deepgram API key"
+                value={prefs.dg_api_key || ""}
+                onChange={(e) => savePrefs({ dg_api_key: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Model</label>
+              <select
+                className="fsel"
+                value={prefs.dg_model || "nova-2"}
+                onChange={(e) => savePrefs({ dg_model: e.target.value })}
+                style={{ width: "100%" }}
+              >
+                <option value="nova-2">nova-2 (fast, en/hi/mr)</option>
+                <option value="nova-3">nova-3 (newer, better accuracy)</option>
+                <option value="base">base (cheapest)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <button className="ps-btn ghost sm" onClick={testDg} disabled={dgTesting}>
+              <Zap size={13} /> {dgTesting ? "Testing…" : "Test key"}
+            </button>
+            {dgStatus && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: dgStatus.ok ? "#1A7F5B" : "#B23237", background: dgStatus.ok ? "#EDF9F2" : "#FDF2F2", border: `1px solid ${dgStatus.ok ? "#C8E9D8" : "#F0C9CA"}`, borderRadius: 8, padding: "6px 12px" }}>
+                {dgStatus.ok ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+                {dgStatus.msg}
+              </span>
+            )}
+          </div>
+          <div className="fhint" style={{ marginTop: 10 }}>
+            No Deepgram account yet? Create one at console.deepgram.com — the free tier includes $200 in credits.
+          </div>
+        </div>
+        </>
+        )}
+      </div>
       {showAiForm && (
         <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.35)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={(e) => { if (e.target === e.currentTarget) closeAiForm(); }}>
           <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, width: "100%", maxWidth: 480, maxHeight: "90vh", overflow: "auto", padding: "22px 24px" }}>
@@ -507,25 +668,50 @@ export default function SettingsView() {
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Provider</label>
-              <select className="fsel" value={aiForm.provider} onChange={(e) => setAiForm((f) => ({ ...f, provider: e.target.value }))} style={{ width: "100%" }}>
+              <select className="fsel" value={aiForm.provider} onChange={(e) => { const np = e.target.value; const defBase = PROVIDERS.find((p) => p.id === np)?.basePlaceholder || ""; setAiForm((f) => ({ ...f, provider: np, model: "", base_url: defBase })); loadAiModels({ ...aiForm, provider: np, model: "", base_url: defBase }); }} style={{ width: "100%" }}>
                 {PROVIDERS.map((p) => (<option key={p.id} value={p.id}>{p.label}</option>))}
               </select>
+              {PROVIDERS.find((p) => p.id === aiForm.provider)?.hint && (
+                <div className="fhint" style={{ marginTop: 6 }}>{PROVIDERS.find((p) => p.id === aiForm.provider).hint}</div>
+              )}
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Model</label>
-              <LimitedInput className="finp" maxLength={200} type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.placeholder || "model-name"} value={aiForm.model} onChange={(e) => setAiForm((f) => ({ ...f, model: e.target.value }))} />
+              <label className="ds-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <span>Model</span>
+                <button
+                  type="button"
+                  className="ps-btn ghost sm"
+                  style={{ padding: "3px 10px", fontSize: 12 }}
+                  onClick={() => loadAiModels(aiForm)}
+                  disabled={aiModelsLoading}
+                  title="Fetch available models using these credentials"
+                >
+                  {aiModelsLoading ? "Fetching…" : aiModels.length ? `↻ ${aiModels.length} models` : "⟳ Fetch models"}
+                </button>
+              </label>
+              {aiModels.length > 0 ? (
+                <select className="fsel" value={aiForm.model} onChange={(e) => setAiForm((f) => ({ ...f, model: e.target.value }))} style={{ width: "100%" }}>
+                  <option value="">— select a model —</option>
+                  {aiModels.map((m) => (<option key={m} value={m}>{m}</option>))}
+                </select>
+              ) : (
+                <LimitedInput className="finp" maxLength={200} type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.placeholder || "model-name"} value={aiForm.model} onChange={(e) => setAiForm((f) => ({ ...f, model: e.target.value }))} />
+              )}
+              {aiModelsError && <div className="fhint" style={{ marginTop: 6, color: "#B23237" }}>{aiModelsError}</div>}
+              {!aiModelsError && aiModels.length > 0 && <div className="fhint" style={{ marginTop: 6 }}>Fetched from the provider using your credentials — pick one, or refetch after changing the key.</div>}
             </div>
             <div style={{ marginBottom: 14 }}>
               <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>API Key</label>
               <input className="finp" type="password" placeholder="sk-… or your provider API key" value={aiForm.api_key} onChange={(e) => setAiForm((f) => ({ ...f, api_key: e.target.value }))} />
             </div>
             <div style={{ marginBottom: 18 }}>
-              <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Base URL (optional)</label>
+              <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Base URL <span style={{ color: "#B23237" }}>*</span></label>
               <LimitedInput className="finp" maxLength={500} type="text" placeholder={PROVIDERS.find((p) => p.id === aiForm.provider)?.basePlaceholder || ""} value={aiForm.base_url} onChange={(e) => setAiForm((f) => ({ ...f, base_url: e.target.value }))} />
+              {!aiForm.base_url.trim() && <div className="fhint" style={{ marginTop: 6, color: "#B23237" }}>Base URL is required — e.g. {PROVIDERS.find((p) => p.id === aiForm.provider)?.basePlaceholder || "https://…"}</div>}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <button className="ps-btn ghost" onClick={closeAiForm}>Cancel</button>
-              <button className="ps-btn pri" onClick={submitAiForm} disabled={saving || !aiForm.name.trim()}>
+              <button className="ps-btn pri" onClick={submitAiForm} disabled={saving || !aiForm.name.trim() || !aiForm.base_url.trim()}>
                 {saving ? "Saving…" : editingAiId ? "Update Account" : "Add Account"}
               </button>
             </div>

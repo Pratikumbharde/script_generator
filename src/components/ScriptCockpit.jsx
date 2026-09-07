@@ -281,6 +281,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
           onExit={() => setCallMode(false)}
         />
       )}
+      <div className="ps-container">
       <div className="ps-top" style={{ paddingTop: 18 }}>
         <div>
           <div className="crumb" onClick={onBack}>← Products</div>
@@ -332,7 +333,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
         </div>
       </div>
 
-      <div className="ps-body">
+      <div>
         {/* Language selector — compact */}
         <div className="lang-switcher">
           <div className="ls-label"><Globe size={13} /> Languages</div>
@@ -709,6 +710,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             <ScriptComments scriptId={script.id || 0} userEmail={user?.email || ""} />
           </div>
         </div>
+      </div>
       </div>
 
       {/* Regenerate modal */}

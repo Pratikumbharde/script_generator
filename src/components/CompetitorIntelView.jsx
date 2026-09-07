@@ -100,6 +100,7 @@ export default function CompetitorIntelView() {
   const [addForm, setAddForm] = useState({ name: "", category: "", website: "", product_id: "" });
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   /* Analyze modal */
   const [showAnalyze, setShowAnalyze] = useState(false);
@@ -141,11 +142,33 @@ export default function CompetitorIntelView() {
     }
   }
 
+  /* Per-field validators for the Add Competitor form */
+  const ADD_FIELD_VALIDATORS = {
+    name: (v) => (!v.trim() ? "Competitor name is required." : ""),
+    category: (v) => (!v.trim() ? "Category is required." : ""),
+    website: (v) =>
+      !v.trim()
+        ? "Website URL is required."
+        : !/^https?:\/\/.+\..+/.test(v.trim())
+          ? "Enter a valid URL starting with http:// or https://"
+          : "",
+    product_id: (v) => (!v ? "Select a product to compare against." : ""),
+  };
+
+  function validateAddField(field, value) {
+    const err = ADD_FIELD_VALIDATORS[field] ? ADD_FIELD_VALIDATORS[field](value) : "";
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (err) next[field] = err;
+      else delete next[field];
+      return next;
+    });
+    return !err;
+  }
+
   async function handleAddCompetitor() {
-    if (!addForm.name.trim()) { setAddError("Competitor name is required."); return; }
-    if (!addForm.category.trim()) { setAddError("Category is required."); return; }
-    if (!addForm.website.trim()) { setAddError("Website URL is required."); return; }
-    if (addForm.website.trim() && !/^https?:\/\/.+\..+/.test(addForm.website.trim())) { setAddError("Please enter a valid URL starting with http:// or https://"); return; }
+    const results = Object.keys(ADD_FIELD_VALIDATORS).map((f) => validateAddField(f, addForm[f]));
+    if (results.some((ok) => !ok)) return;
     setAdding(true);
     setAddError("");
     try {
@@ -158,6 +181,7 @@ export default function CompetitorIntelView() {
       setCompetitors((prev) => [...prev, created]);
       setShowAdd(false);
       setAddForm({ name: "", category: "", website: "", product_id: "" });
+      setFieldErrors({});
       setSelectedCompetitor(created);
       setMode("detail");
       setDetailTab("overview");
@@ -273,6 +297,12 @@ export default function CompetitorIntelView() {
   }, [competitors, searchQuery, threatFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredCompetitors.length / pageSize));
+
+  /* Keep page in range when the list shrinks (e.g. deletion on the last page) */
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
   const paginated = filteredCompetitors.slice((page - 1) * pageSize, page * pageSize);
 
   /* Latest intel for selected competitor */
@@ -316,7 +346,7 @@ export default function CompetitorIntelView() {
           <div className="ps-sub">Track competitors, detect changes, and keep your sales team prepared.</div>
         </div>
         {mode === "overview" && (
-          <button className="ps-btn pri" onClick={() => { setShowAdd(true); setAddError(""); }}>
+          <button className="ps-btn pri" onClick={() => { setShowAdd(true); setAddError(""); setFieldErrors({}); }}>
             <Plus size={15} /> Add competitor
           </button>
         )}
@@ -338,7 +368,7 @@ export default function CompetitorIntelView() {
                 <p style={{ maxWidth: 460 }}>
                   Add competitors to monitor their positioning, pricing, product updates and sales messaging.
                 </p>
-                <button className="ps-btn pri" onClick={() => setShowAdd(true)} style={{ marginTop: 8 }}>
+                <button className="ps-btn pri" onClick={() => { setShowAdd(true); setAddError(""); setFieldErrors({}); }} style={{ marginTop: 8 }}>
                   <Plus size={15} /> Add competitor
                 </button>
                 <div
@@ -548,18 +578,19 @@ export default function CompetitorIntelView() {
                         </tbody>
                       </table>
                     </div>
-
-                    {filteredCompetitors.length > pageSize && (
-                      <div className="ds-pagination">
-                        <span className="ds-pagination-info">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredCompetitors.length)} of {filteredCompetitors.length}</span>
-                        <div className="ds-pagination-actions">
-                          <button className="ds-btn-ico" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}><ChevronLeft size={16} /></button>
-                          <span className="ds-pagination-pages">Page {page} of {totalPages}</span>
-                          <button className="ds-btn-ico" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}><ChevronRight size={16} /></button>
-                        </div>
-                      </div>
-                    )}
                   </>
+                )}
+
+                {/* Pagination — shared by card and list views */}
+                {filteredCompetitors.length > pageSize && (
+                  <div className="ds-pagination">
+                    <span className="ds-pagination-info">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredCompetitors.length)} of {filteredCompetitors.length}</span>
+                    <div className="ds-pagination-actions">
+                      <button className="ds-btn-ico" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}><ChevronLeft size={16} /></button>
+                      <span className="ds-pagination-pages">Page {page} of {totalPages}</span>
+                      <button className="ds-btn-ico" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}><ChevronRight size={16} /></button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Recent changes */}
@@ -1156,8 +1187,10 @@ export default function CompetitorIntelView() {
                 maxLength={200}
                 placeholder="e.g. Zoho CRM"
                 value={addForm.name}
-                onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                onChange={(e) => { setAddForm({ ...addForm, name: e.target.value }); if (fieldErrors.name) validateAddField("name", e.target.value); }}
+                onBlur={() => validateAddField("name", addForm.name)}
               />
+              {fieldErrors.name && <div className="ferr">{fieldErrors.name}</div>}
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
               <label className="flab">Category<span className="req">*</span></label>
@@ -1166,8 +1199,10 @@ export default function CompetitorIntelView() {
                 maxLength={200}
                 placeholder="e.g. CRM Software"
                 value={addForm.category}
-                onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
+                onChange={(e) => { setAddForm({ ...addForm, category: e.target.value }); if (fieldErrors.category) validateAddField("category", e.target.value); }}
+                onBlur={() => validateAddField("category", addForm.category)}
               />
+              {fieldErrors.category && <div className="ferr">{fieldErrors.category}</div>}
             </div>
             <div className="frow" style={{ marginBottom: 14 }}>
               <label className="flab">Website<span className="req">*</span></label>
@@ -1176,15 +1211,18 @@ export default function CompetitorIntelView() {
                 maxLength={500}
                 placeholder="https://..."
                 value={addForm.website}
-                onChange={(e) => setAddForm({ ...addForm, website: e.target.value })}
+                onChange={(e) => { setAddForm({ ...addForm, website: e.target.value }); if (fieldErrors.website) validateAddField("website", e.target.value); }}
+                onBlur={() => validateAddField("website", addForm.website)}
               />
+              {fieldErrors.website && <div className="ferr">{fieldErrors.website}</div>}
             </div>
             <div className="frow" style={{ marginBottom: 18 }}>
               <label className="flab">Product to compare against<span className="req">*</span></label>
               <select
                 className="finp"
                 value={addForm.product_id}
-                onChange={(e) => setAddForm({ ...addForm, product_id: e.target.value })}
+                onChange={(e) => { setAddForm({ ...addForm, product_id: e.target.value }); validateAddField("product_id", e.target.value); }}
+                onBlur={() => validateAddField("product_id", addForm.product_id)}
               >
                 <option value="">Select product…</option>
                 {products.map((p) => (
@@ -1193,6 +1231,7 @@ export default function CompetitorIntelView() {
                   </option>
                 ))}
               </select>
+              {fieldErrors.product_id && <div className="ferr">{fieldErrors.product_id}</div>}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button className="ps-btn ghost" onClick={() => setShowAdd(false)} disabled={adding}>
@@ -1200,7 +1239,7 @@ export default function CompetitorIntelView() {
               </button>
               <button
                 className="ps-btn pri"
-                disabled={!addForm.name.trim() || adding}
+                disabled={adding}
                 onClick={handleAddCompetitor}
               >
                 {adding ? (

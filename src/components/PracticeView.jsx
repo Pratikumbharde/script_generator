@@ -19,6 +19,12 @@ import {
 const STORAGE_KEY = "ps_practice_history";
 const STATS_KEY = "ps_practice_stats";
 
+/* BCP-47 tags for the Web Speech API recognizer, keyed by script language id */
+const SR_LANGS = {
+  en: "en-US", hinglish: "hi-IN", hi: "hi-IN", mr: "mr-IN", ta: "ta-IN",
+  te: "te-IN", bn: "bn-IN", gu: "gu-IN", kn: "kn-IN", pa: "pa-IN",
+};
+
 function loadHistory() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -88,6 +94,7 @@ export default function PracticeView({ products }) {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef(null);
+  const keepListeningRef = useRef(false);
   const abortRef = useRef(false);
 
   /* Load scripts */
@@ -106,6 +113,7 @@ export default function PracticeView({ products }) {
   useEffect(() => {
     return () => {
       abortRef.current = true;
+      keepListeningRef.current = false;
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch {}
         recognitionRef.current = null;
@@ -238,8 +246,9 @@ export default function PracticeView({ products }) {
     return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   };
 
-  /* ── Speech-to-text ── */
+  /* ── Speech-to-text (browser Web Speech API — no external library) ── */
   const stopListening = useCallback(() => {
+    keepListeningRef.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;
@@ -259,7 +268,9 @@ export default function PracticeView({ products }) {
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    /* Match the recognition language to the practiced script (Hinglish → hi-IN
+       handles mixed Hindi+English speech best in Chrome) */
+    recognition.lang = SR_LANGS[selectedScript?.meta?.language] || "en-US";
 
     recognition.onresult = (event) => {
       let finalChunk = "";
@@ -278,27 +289,46 @@ export default function PracticeView({ products }) {
     recognition.onerror = (event) => {
       if (event.error === "aborted") return;
       console.error("Speech error:", event.error);
+      if (event.error === "not-allowed") {
+        keepListeningRef.current = false;
+        setError("Microphone access denied. Allow mic permission and try again.");
+      } else if (event.error === "no-speech" || event.error === "network") {
+        return; /* onend will restart it while keepListeningRef is true */
+      }
       setIsListening(false);
       recognitionRef.current = null;
-      if (event.error === "not-allowed") {
-        setError("Microphone access denied. Allow mic permission and try again.");
-      }
     };
 
     recognition.onend = () => {
+      /* Chrome auto-ends recognition after a pause or ~60s of speech — restart
+         while the user still wants to dictate so the mic doesn't die silently */
+      if (keepListeningRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          setTimeout(() => {
+            if (keepListeningRef.current) {
+              try { recognition.start(); } catch {}
+            }
+          }, 300);
+        }
+        return;
+      }
       setIsListening(false);
       recognitionRef.current = null;
     };
 
     try {
+      keepListeningRef.current = true;
       recognition.start();
       recognitionRef.current = recognition;
       setIsListening(true);
       setError("");
     } catch (e) {
+      keepListeningRef.current = false;
       console.error("Failed to start speech:", e);
     }
-  }, [isListening, stopListening]);
+  }, [isListening, stopListening, selectedScript]);
 
   /* ── Scenario generation ── */
   const pickScenario = async (scriptRec) => {

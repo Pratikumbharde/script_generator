@@ -83,7 +83,8 @@ function confidenceLabel(winCount, lossCount) {
 function formatDate(ts) {
   if (!ts) return "—";
   const normalized = typeof ts === 'string' && !ts.endsWith('Z') && !ts.includes('+') ? ts + 'Z' : ts;
-  const d = new Date(typeof normalized === 'string' ? normalized : normalized * 1000);
+  /* Numbers are epoch: Date.now() gives ms (>1e11); seconds epoch (<1e11) needs *1000 */
+  const d = new Date(typeof normalized === 'string' ? normalized : (normalized > 1e11 ? normalized : normalized * 1000));
   if (isNaN(d.getTime())) return "—";
   const now = new Date();
   const diffMs = now - d;
@@ -99,6 +100,7 @@ function formatDate(ts) {
 
 export default function ConversationIntelligenceView() {
   const [tab, setTab] = useState("overview");
+  const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
@@ -111,7 +113,7 @@ export default function ConversationIntelligenceView() {
   /* Filters */
   const [patternFilter, setPatternFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [minConfidence, setMinConfidence] = useState(5);
+  const [minConfidence, setMinConfidence] = useState(2);
   const [searchQ, setSearchQ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -140,6 +142,12 @@ export default function ConversationIntelligenceView() {
   useEffect(() => {
     if (tab === "phrases") loadPhrases();
   }, [tab]);
+
+  /* ── Tick every 30s so relative dates ("2m ago") stay live ── */
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   async function loadOverview() {
     try {
@@ -212,7 +220,8 @@ export default function ConversationIntelligenceView() {
     if (patternFilter === "losing") rows = rows.filter((p) => (p.win_correlation || 0) < 0);
     if (categoryFilter !== "all") rows = rows.filter((p) => p.category === categoryFilter);
     if (minConfidence > 0) {
-      rows = rows.filter((p) => ((p.win_count || 0) + (p.loss_count || 0)) >= minConfidence);
+      /* "Occurrences" = usage_count (falls back to win+loss for older rows) */
+      rows = rows.filter((p) => (p.usage_count || (p.win_count || 0) + (p.loss_count || 0)) >= minConfidence);
     }
     if (searchQ.trim()) {
       const q = searchQ.toLowerCase();
@@ -596,8 +605,8 @@ export default function ConversationIntelligenceView() {
               <button onClick={() => setCategoryFilter("all")}><X size={12} /></button>
             </span>
           )}
-          {(patternFilter !== "all" || categoryFilter !== "all" || searchQ.trim()) && (
-            <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setPatternFilter("all"); setCategoryFilter("all"); setSearchQ(""); }}>Clear all</button>
+          {(patternFilter !== "all" || categoryFilter !== "all" || searchQ.trim() || minConfidence !== 2) && (
+            <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setPatternFilter("all"); setCategoryFilter("all"); setSearchQ(""); setMinConfidence(2); }}>Clear all</button>
           )}
         </div>
 
@@ -698,15 +707,35 @@ export default function ConversationIntelligenceView() {
           </div>
         </div>
 
+        {/* Applied filters */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13, color: "var(--muted)" }}>
+          <span style={{ fontWeight: 600, color: "var(--ink)" }}>{filteredCalls.length}</span> calls
+          {callOutcomeFilter !== "all" && (
+            <span className="dt-chip-removable">
+              {OUTCOME_OPTIONS.find((o) => o.id === callOutcomeFilter)?.label}
+              <button onClick={() => setCallOutcomeFilter("all")}><X size={12} /></button>
+            </span>
+          )}
+          {callSearch.trim() && (
+            <span className="dt-chip-removable">
+              "{callSearch}"
+              <button onClick={() => setCallSearch("")}><X size={12} /></button>
+            </span>
+          )}
+          {(callOutcomeFilter !== "all" || callSearch.trim()) && (
+            <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setCallOutcomeFilter("all"); setCallSearch(""); }}>Clear all</button>
+          )}
+        </div>
+
         <div className="dt-table-wrap">
           <table className="dt-table">
             <thead>
               <tr>
                 <th>Product</th>
-                <th>Method</th>
-                <th>Type</th>
-                <th style={{ textAlign: "right" }}>Duration</th>
-                <th>Outcome</th>
+                <th style={{ textAlign: "center" }}>Method</th>
+                <th style={{ textAlign: "center" }}>Type</th>
+                <th style={{ textAlign: "center" }}>Duration</th>
+                <th style={{ textAlign: "center" }}>Outcome</th>
                 <th style={{ textAlign: "right" }}>Date</th>
               </tr>
             </thead>
@@ -721,10 +750,10 @@ export default function ConversationIntelligenceView() {
                 return (
                   <tr key={c.id}>
                     <td style={{ fontWeight: 600, fontSize: 13.5 }}>{c.product_name || "—"}</td>
-                    <td style={{ fontSize: 13, color: "var(--muted)" }}>{c.method || "—"}</td>
-                    <td style={{ fontSize: 13, color: "var(--muted)" }}>{c.call_type || "—"}</td>
-                    <td style={{ textAlign: "right", fontSize: 13 }}>{c.duration ? `${c.duration}m` : "—"}</td>
-                    <td>
+                    <td style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}>{c.method || "—"}</td>
+                    <td style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}>{c.call_type || "—"}</td>
+                    <td style={{ textAlign: "center", fontSize: 13 }}>{c.duration ? `${c.duration}m` : "—"}</td>
+                    <td style={{ textAlign: "center" }}>
                       <span className={`ds-status ${c.outcome === "won" ? "ok" : c.outcome === "lost" ? "bad" : c.outcome === "no_deal" ? "neu" : "warn"}`}>
                         <span className="ds-status-dot" />
                         {outcomeMeta.label}

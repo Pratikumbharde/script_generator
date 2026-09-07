@@ -82,7 +82,8 @@ function scoreBadge(val) {
 
 function formatDate(ts) {
   if (!ts) return "—";
-  const d = new Date(typeof ts === "string" ? ts : ts * 1000);
+  /* saved_at is unix ms (numbers ≥ 1e12); older unix-seconds timestamps get scaled up */
+  const d = new Date(typeof ts === "string" ? ts : ts < 1e12 ? ts * 1000 : ts);
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -141,7 +142,21 @@ export default function DealScoreView() {
       }
       let segments = [];
       try { segments = JSON.parse(call.segments_json || "[]"); } catch { segments = []; }
-      const text = segments.map((s) => s.content || s.text || "").filter(Boolean).join("\n");
+      /* Segments are time-blocked script rows: {label, start, end, goal, say[], ask[]} —
+         flatten every spoken/guidance line into a readable transcript */
+      const text = segments
+        .map((s) => {
+          const lines = [];
+          if (s.label) lines.push(`[${s.label}]`);
+          if (s.goal) lines.push(`Goal: ${s.goal}`);
+          for (const l of s.say || []) lines.push(`Rep: ${l}`);
+          for (const l of s.ask || []) lines.push(`Ask: ${l}`);
+          if (s.content) lines.push(s.content);
+          else if (s.text) lines.push(s.text);
+          return lines.join("\n");
+        })
+        .filter(Boolean)
+        .join("\n\n");
       finalTranscript = text || call.notes || "";
       scriptId = call.id;
       callId = call.id;

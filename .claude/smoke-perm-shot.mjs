@@ -1,0 +1,20 @@
+import { chromium } from 'playwright-core'
+const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+const browser = await chromium.launch({ executablePath: CHROME, headless: true })
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' })
+await page.fill('input[type="email"]', 'claude.smoke@test.dev')
+await page.fill('input[type="password"]', 'Smoke1234!')
+await page.click('button[type="submit"]')
+await page.waitForSelector('.es-sidebar', { timeout: 15000 })
+await page.click('.es-group-header:has-text("Team")')
+await page.click('.es-nav-item:has-text("Permissions")')
+await page.waitForSelector('.ps-table tbody tr', { timeout: 15000 })
+await page.screenshot({ path: 'D:/office/script_generator/.claude/shots/perm-aligned.png' })
+// Also check Export page chips
+await page.click('.es-group-header:has-text("Admin")')
+await page.click('.es-nav-item:has-text("Export")')
+await page.waitForSelector('.exp-included-grid', { timeout: 15000 })
+await page.screenshot({ path: 'D:/office/script_generator/.claude/shots/export-aligned.png', fullPage: true })
+await browser.close()
+console.log('done')

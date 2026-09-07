@@ -69,24 +69,33 @@ export default function AnalyticsDashboard() {
   const [trend, setTrend] = useState([]);
   const [topMethods, setTopMethods] = useState([]);
   const [teamActivity, setTeamActivity] = useState([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
+    setLoadError("");
     try {
-      const [ov, tr, tm, ta] = await Promise.all([
+      // Settled, not all-or-nothing: one failing widget shouldn't blank the rest
+      const [ov, tr, tm, ta] = await Promise.allSettled([
         getAnalyticsOverview(),
         getWinRateTrend(),
         getTopMethods(),
         getTeamActivity(),
       ]);
-      setOverview(ov);
-      setTrend(tr?.trend || []);
-      setTopMethods(tm?.methods || []);
-      setTeamActivity(ta?.members || []);
+      setOverview(ov.status === "fulfilled" ? ov.value : null);
+      setTrend(tr.status === "fulfilled" ? tr.value?.trend || [] : []);
+      setTopMethods(tm.status === "fulfilled" ? tm.value?.methods || [] : []);
+      setTeamActivity(ta.status === "fulfilled" ? ta.value?.members || [] : []);
+      const rejected = [ov, tr, tm, ta].filter((r) => r.status === "rejected");
+      if (rejected.length > 0) {
+        console.error("Analytics partial load failure:", rejected.map((r) => r.reason));
+        setLoadError("Some analytics data couldn't be loaded. Try refreshing.");
+      }
     } catch (e) {
       console.error(e);
+      setLoadError("Failed to load analytics. Try refreshing.");
     } finally {
       setLoading(false);
     }
@@ -135,6 +144,9 @@ export default function AnalyticsDashboard() {
         </div>
       ) : (
         <>
+          {loadError && (
+            <div className="ps-error" style={{ marginBottom: 16 }}>⚠ {loadError}</div>
+          )}
           {/* KPI Bar */}
           <div className="ci-kpi-bar" style={{ marginBottom: 24 }}>
             <KPICard
@@ -196,7 +208,7 @@ export default function AnalyticsDashboard() {
               ) : (
                 <div className="bar-chart">
                   {trendData.map((t, i) => {
-                    const h = Math.round(((t.total || 0) / maxTotal) * 140);
+                    const h = Math.round(((t.total || 0) / maxTotal) * 96);
                     const wr = t.total > 0 ? Math.round(((t.wins || 0) / t.total) * 100) : 0;
                     return (
                       <div key={i} className="bar-col">

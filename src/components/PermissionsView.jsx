@@ -23,6 +23,8 @@ export default function PermissionsView() {
   const [allPerms, setAllPerms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -44,10 +46,19 @@ export default function PermissionsView() {
 
   async function togglePerm(role, key) {
     const row = allPerms.find((p) => p.role === role)
-    if (!row) return
+    if (!row || saving) return
+    setSaving(true)
+    setSaveError('')
     const updated = { ...row, [key]: row[key] ? 0 : 1 }
-    await updateWorkspacePermission(role, updated)
-    await load()
+    try {
+      await updateWorkspacePermission(role, updated)
+      await load()
+    } catch (e) {
+      setSaveError(e.message || 'Could not save permission')
+      await load() // resync checkboxes with what the server actually has
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return <div className="ps-loading"><div className="ps-spinner" /> Loading permissions...</div>
@@ -69,9 +80,9 @@ export default function PermissionsView() {
             </div>
             <div className="ps-muted" style={{ fontSize: 12 }}>Only owners and admins can edit permissions.</div>
           </div>
-          <div className="ps-grid" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+          <div className="exp-included-grid" style={{ marginTop: 12 }}>
             {Object.entries(PERM_LABELS).map(([key, label]) => (
-              <div key={key} className="ps-flex-between" style={{ fontSize: 13 }}>
+              <div key={key} className="exp-item">
                 <span>{label}</span>
                 <span style={{ color: myPerms.permissions[key] ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
                   {myPerms.permissions[key] ? '✓' : '✕'}
@@ -85,6 +96,9 @@ export default function PermissionsView() {
       {myPerms?.role === 'owner' || myPerms?.role === 'admin' ? (
         <div>
           <h2 className="ps-section-title">Edit Permissions</h2>
+          {saveError && (
+            <div className="ps-error" style={{ marginBottom: 10 }}>⚠ {saveError}</div>
+          )}
           <div className="ps-card">
             <table className="ps-table">
               <thead>
@@ -105,7 +119,7 @@ export default function PermissionsView() {
                             type="checkbox"
                             checked={row ? !!row[key] : true}
                             onChange={() => togglePerm(role, key)}
-                            disabled={role === 'owner'}
+                            disabled={role === 'owner' || saving}
                           />
                         </td>
                       ))}

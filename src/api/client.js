@@ -808,6 +808,10 @@ export async function getModelRoutingLogs() {
 }
 
 /* ---------- P11.2: AI model accounts ---------- */
+export async function getAiConfig() {
+  return fetchJson('/ai-config')
+}
+
 export async function listAiAccounts() {
   return fetchJson('/ai-accounts').then((r) => r.accounts)
 }
@@ -851,6 +855,14 @@ export async function duplicateEmailTemplate(id) {
 
 export async function testSmtp(data) {
   return fetchJson('/email/test-smtp', { method: 'POST', body: JSON.stringify(data) }).then((r) => r)
+}
+
+export async function fetchAiModels(data) {
+  return fetchJson('/ai/models', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function testDeepgram() {
+  return fetchJson('/deepgram/test', { method: 'POST', body: JSON.stringify({}) }).then((r) => r)
 }
 
 /* ---------- RBAC: team & script assignments ---------- */
