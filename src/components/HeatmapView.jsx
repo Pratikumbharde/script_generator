@@ -27,6 +27,7 @@ import {
   LayoutTemplate,
   ChevronRight,
   ExternalLink,
+  Info,
 } from "lucide-react";
 
 /* ============================================================
@@ -128,6 +129,9 @@ export default function ConversationIntelligenceView() {
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  /* Shown when analysis completes successfully but finds 0 patterns */
+  const [analysisNote, setAnalysisNote] = useState("");
 
   /* Refs */
   const abortRef = useRef(false);
@@ -184,11 +188,26 @@ export default function ConversationIntelligenceView() {
   async function handleAnalyzeScripts() {
     setAnalyzing(true);
     setError("");
+    setAnalysisNote("");
     try {
       const data = await analyzeScriptsCI();
-      setPhrases(data.heatmaps || []);
-      setOverview((prev) => ({ ...prev, phrasesAnalyzed: (data.heatmaps || []).length }));
-      setTab("phrases");
+      const rows = data.heatmaps || [];
+      setPhrases(rows);
+      setOverview((prev) => ({ ...prev, phrasesAnalyzed: rows.length }));
+      if (rows.length > 0) {
+        setTab("phrases");
+      } else {
+        /* Analysis ran but the AI found no phrase appearing in 2+ calls.
+           Stay here and explain instead of dumping the user on an empty Phrases tab. */
+        const s = data.summary || {};
+        const scope = s.total_calls_analyzed
+          ? `${s.total_calls_analyzed} call(s) reviewed (${s.winning_calls || 0} won / ${s.losing_calls || 0} lost)`
+          : "your calls";
+        setAnalysisNote(
+          `Analysis finished — ${scope}, but no phrase showed up consistently in both wins and losses. ` +
+          "Mark more scripts as Won or Lost in Call Studio (ideally 2+ of each), then re-analyze."
+        );
+      }
     } catch (e) {
       setError(e.message || "Analysis failed");
     } finally {
@@ -197,11 +216,17 @@ export default function ConversationIntelligenceView() {
   }
 
   async function handleImportTranscripts() {
-    const lines = importText.split("\n").filter((t) => t.trim().length > 20);
-    if (lines.length === 0) return;
+    const text = importText.trim();
+    if (text.length < 40) {
+      setImportError("Paste a full call transcript (a few sentences or more) to analyze.");
+      return;
+    }
+    /* Multiple pasted calls are separated by blank lines; a single paste is one transcript. */
+    const blocks = text.split(/\n\s*\n+/).map((b) => b.trim()).filter((b) => b.length > 20);
+    const transcripts = blocks.length > 0 ? blocks : [text];
     setImporting(true);
     try {
-      await generateHeatmaps(lines);
+      await generateHeatmaps(transcripts);
       setImportText("");
       setShowImport(false);
       await loadPhrases();
@@ -298,11 +323,12 @@ export default function ConversationIntelligenceView() {
       <div className="ci-kpi-bar" style={{ marginBottom: 24 }}>
         {items.map((k) => (
           <div key={k.label} className="ci-kpi">
-            <div className="ci-kpi-label" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <k.icon size={14} /> {k.label}
+            <div className="ci-icon"><k.icon size={18} /></div>
+            <div className="ci-body">
+              <div className="ci-kpi-label">{k.label}</div>
+              <div className="ci-kpi-value">{k.value}</div>
+              <div className="ci-kpi-sublabel" style={{ wordBreak: 'break-word' }}>{k.sub}</div>
             </div>
-            <div className="ci-kpi-value">{k.value}</div>
-            <div className="ci-kpi-sublabel">{k.sub}</div>
           </div>
         ))}
       </div>
@@ -340,7 +366,7 @@ export default function ConversationIntelligenceView() {
               )}
             </button>
           )}
-          <button className="ps-btn ghost" onClick={() => setShowImport(true)}>
+          <button className="ps-btn ghost" onClick={() => { setImportError(""); setShowImport(true); }}>
             <ExternalLink size={16} style={{ marginRight: 6 }} />
             Import transcripts
           </button>
@@ -386,7 +412,7 @@ export default function ConversationIntelligenceView() {
                   </>
                 )}
               </button>
-              <button className="ps-btn ghost sm" onClick={() => setShowImport(true)}>
+              <button className="ps-btn ghost sm" onClick={() => { setImportError(""); setShowImport(true); }}>
                 <ExternalLink size={14} style={{ marginRight: 5 }} />
                 Import
               </button>
@@ -535,7 +561,7 @@ export default function ConversationIntelligenceView() {
             <RotateCcw size={14} style={{ marginRight: 4 }} />
             {analyzing ? "Analyzing..." : "Re-analyze"}
           </button>
-          <button className="ps-btn ghost sm" onClick={() => setShowImport(true)}>
+          <button className="ps-btn ghost sm" onClick={() => { setImportError(""); setShowImport(true); }}>
             <ExternalLink size={14} style={{ marginRight: 4 }} />
             Import
           </button>
@@ -609,6 +635,25 @@ export default function ConversationIntelligenceView() {
             <button className="ps-btn-ghost" style={{ fontSize: 11.5 }} onClick={() => { setPatternFilter("all"); setCategoryFilter("all"); setSearchQ(""); setMinConfidence(2); }}>Clear all</button>
           )}
         </div>
+
+        {/* All rows filtered out, but data exists */}
+        {filteredPhrases.length === 0 && phrases.length > 0 && (
+          <div className="ci-empty" style={{ padding: "32px 24px", textAlign: "center" }}>
+            <Filter size={28} style={{ margin: "0 auto 12px", color: "var(--faint)" }} />
+            <h3 style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
+              All {phrases.length} patterns are hidden by your filters
+            </h3>
+            <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
+              Lower the minimum occurrences, or clear the filters to see everything.
+            </p>
+            <button
+              className="ps-btn ghost sm"
+              onClick={() => { setPatternFilter("all"); setCategoryFilter("all"); setSearchQ(""); setMinConfidence(2); }}
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="dt-table-wrap">
@@ -968,12 +1013,13 @@ export default function ConversationIntelligenceView() {
           <LimitedTextarea
             className="ftext"
             rows={6}
-            placeholder="Paste transcripts here, one per line..."
+            placeholder="Paste a call transcript here… separate multiple calls with a blank line"
             value={importText}
-            onChange={(e) => setImportText(e.target.value)}
+            onChange={(e) => { setImportText(e.target.value); if (importError) setImportError(""); }}
             maxLength={10000}
             style={{ marginBottom: 12 }}
           />
+          {importError && <div style={{ color: "#B23237", fontSize: 13, marginBottom: 10 }}>⚠ {importError}</div>}
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button className="ps-btn ghost" onClick={() => setShowImport(false)}>Cancel</button>
             <button className="ps-btn pri" onClick={handleImportTranscripts} disabled={importing || !importText.trim()}>
@@ -995,6 +1041,33 @@ export default function ConversationIntelligenceView() {
           <div className="ps-sub">Discover which phrases and approaches correlate with wins and losses.</div>
         </div>
       </div>
+
+      {/* Analysis-completed-but-empty note */}
+      {analysisNote && (
+        <div style={{
+          marginBottom: 16,
+          padding: "12px 16px",
+          borderRadius: 10,
+          background: "var(--amber-bg, #FEF6E7)",
+          border: "1px solid #F0DCA8",
+          color: "#7A5A0A",
+          fontSize: 13,
+          lineHeight: 1.5,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 8,
+        }}>
+          <Info size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+          <span>{analysisNote}</span>
+          <button
+            className="ps-btn ghost sm"
+            style={{ marginLeft: "auto", flexShrink: 0 }}
+            onClick={() => setAnalysisNote("")}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Global error */}
       {error && (

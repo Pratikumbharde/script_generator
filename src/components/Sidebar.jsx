@@ -72,7 +72,7 @@ const NAV_GROUPS = [
     label: "Admin",
     items: [
       { id: "export", label: "Export" },
-      { id: "automation", label: "Automation" },
+      { id: "automation", label: "Automation Rules" },
     ],
   },
 ];

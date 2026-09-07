@@ -31,20 +31,22 @@ function KPICard({ label, value, sub, icon: Icon, trend }) {
   const trendColor = trend > 0 ? "#1A7F5B" : trend < 0 ? "#B23237" : "var(--faint)";
   return (
     <div className="ci-kpi" style={{ textAlign: "left", padding: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div className="ci-kpi-label" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 0 }}>
-          <Icon size={14} />
-          {label}
+      <div className="ci-body" style={{ flex: 1, width: '100%' }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div className="ci-kpi-label" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 0 }}>
+            <Icon size={14} />
+            {label}
+          </div>
+          {trend !== undefined && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: trendColor, display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+              <trendIcon size={11} />
+              {Math.abs(trend)}%
+            </span>
+          )}
         </div>
-        {trend !== undefined && (
-          <span style={{ fontSize: 11, fontWeight: 700, color: trendColor, display: "flex", alignItems: "center", gap: 3 }}>
-            <trendIcon size={11} />
-            {Math.abs(trend)}%
-          </span>
-        )}
+        <div className="ci-kpi-value">{value}</div>
+        {sub && <div className="ci-kpi-sublabel">{sub}</div>}
       </div>
-      <div className="ci-kpi-value">{value}</div>
-      {sub && <div className="ci-kpi-sublabel">{sub}</div>}
     </div>
   );
 }

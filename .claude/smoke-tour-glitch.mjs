@@ -23,7 +23,7 @@ for (let i = 1; i < 30; i++) {
     await p.waitForTimeout(500)
     check = await p.evaluate(() => {
       const spot = document.querySelector('.tg-spot')
-      const top = document.querySelector('.ps-top')
+      const top = document.querySelector('.ps-top, .si-top, .ps-header')
       const tip = document.querySelector('.tg-tip')
       const title = document.querySelector('.tg-title')?.textContent || ''
       const count = document.querySelector('.tg-count')?.textContent || ''

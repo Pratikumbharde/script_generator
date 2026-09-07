@@ -145,6 +145,23 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
           const r = el.getBoundingClientRect()
           setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
           setReady(true)
+          /* Views keep reflowing after their target first appears — entry
+             transitions, data-driven layout shifts, font swaps. A single
+             measurement can catch the element mid-settle (it froze on a
+             half-laid-out header once), so re-measure as the page settles. */
+          ;[250, 600, 1100, 1700].forEach((ms) => {
+            setTimeout(() => {
+              if (cancelled) return
+              const cur = document.querySelector(step.selector)
+              if (!isVisibleTarget(cur)) return
+              const cr = cur.getBoundingClientRect()
+              setRect((prev) => {
+                if (prev && Math.abs(prev.top - cr.top) < 1 && Math.abs(prev.left - cr.left) < 1 &&
+                    Math.abs(prev.width - cr.width) < 1 && Math.abs(prev.height - cr.height) < 1) return prev
+                return { top: cr.top, left: cr.left, width: cr.width, height: cr.height }
+              })
+            }, ms)
+          })
         })
       } else if (Date.now() - started < 12000) {
         setTimeout(tryFind, 120)

@@ -232,11 +232,12 @@ export default function DealScoreView() {
       <div className="ci-kpi-bar" style={{ marginBottom: 24 }}>
         {items.map((k) => (
           <div key={k.label} className="ci-kpi">
-            <div className="ci-kpi-label" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <k.icon size={14} /> {k.label}
+            <div className="ci-icon"><k.icon size={18} /></div>
+            <div className="ci-body">
+              <div className="ci-kpi-label">{k.label}</div>
+              <div className="ci-kpi-value">{k.value}</div>
+              <div className="ci-kpi-sublabel" style={{ wordBreak: 'break-word' }}>{k.sub}</div>
             </div>
-            <div className="ci-kpi-value">{k.value}</div>
-            <div className="ci-kpi-sublabel">{k.sub}</div>
           </div>
         ))}
       </div>

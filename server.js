@@ -999,6 +999,7 @@ function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
+    if (!decoded?.userId) return res.status(401).json({ error: 'Invalid token' })
     req.userId = decoded.userId
     req.userEmail = decoded.email
     next()
