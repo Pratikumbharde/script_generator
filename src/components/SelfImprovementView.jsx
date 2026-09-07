@@ -59,16 +59,18 @@ export default function SelfImprovementView() {
 
   if (loading) {
     return (
-      <div className="si-view">
-        <div className="si-top">
+      <div>
+        <div className="ps-top">
           <div>
             <div className="ps-eyebrow">Optimize</div>
             <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Self-Improvement</div>
             <div className="ps-sub">Your scripts learn from every call outcome.</div>
           </div>
         </div>
-        <div className="ps-card" style={{ padding: 40, textAlign: 'center' }}>
-          <div className="loading-box"><div className="ring" /><div className="msg">Loading patterns…</div></div>
+        <div className="ps-body">
+          <div className="ps-card" style={{ padding: 40, textAlign: 'center' }}>
+            <div className="loading-box"><div className="ring" /><div className="msg">Loading patterns…</div></div>
+          </div>
         </div>
       </div>
     )
@@ -77,8 +79,8 @@ export default function SelfImprovementView() {
   const { methodStats = [], callTypeStats = [], insights = [], losingPatterns = [], topPerforming = [], totalScripts = 0, totalWins = 0, totalLosses = 0, overallWinRate = 0, minimumData = false } = patterns || {}
 
   return (
-    <div className="si-view">
-      <div className="si-top">
+    <div>
+      <div className="ps-top">
         <div>
           <div className="ps-eyebrow">Optimize</div>
           <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Self-Improvement</div>
@@ -89,6 +91,7 @@ export default function SelfImprovementView() {
         </button>
       </div>
 
+      <div className="ps-body">
       {error && <div className="ca-error">{error}</div>}
 
       {!minimumData ? (
@@ -250,6 +253,7 @@ export default function SelfImprovementView() {
           )}
         </>
       )}
+      </div>
     </div>
   )
 }

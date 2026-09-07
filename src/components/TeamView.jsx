@@ -109,8 +109,16 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
   const wsPending = workspace?.pending || [];
   const isOwner = workspace?.role === "owner" || workspace?.role === "admin";
 
-  // Merge API members with workspace members for display
-  const displayMembers = members.length > 0 ? members : wsMembers;
+  // Merge API members with workspace members for display.
+  // Dedupe by id/email — a duplicated row would share the same dropdown
+  // key, making one member's menu open/close every copy at once.
+  const seen = new Set();
+  const displayMembers = (members.length > 0 ? members : wsMembers).filter((m) => {
+    const key = String(m.id || m.email || "");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   const roleBadgeStyle = (role) => {
     if (role === "admin") return { background: "var(--accent)", color: "#fff" };

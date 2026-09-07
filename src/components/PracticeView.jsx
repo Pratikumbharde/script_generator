@@ -1024,7 +1024,7 @@ Evaluate the response.`;
 
         {/* Review past session */}
         {reviewEntry && (
-          <div className="ps-card" style={{ maxWidth: 720 }}>
+          <div className="ps-card" style={{ maxWidth: 720, margin: "0 auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
               <button className="ps-btn ghost sm" onClick={() => setReviewEntry(null)}>
                 ← Back
@@ -1038,7 +1038,7 @@ Evaluate the response.`;
 
         {/* Practice session */}
         {selectedScript && !reviewEntry && (
-          <div className="ps-card" style={{ maxWidth: 720 }}>
+          <div className="ps-card" style={{ maxWidth: 720, margin: "0 auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
               <button className="ps-btn ghost sm" onClick={() => { setSelectedScript(null); setScenario(null); setResult(null); stopListening(); }}>
                 ← Back to scripts
@@ -1119,7 +1119,7 @@ Evaluate the response.`;
                         style={{
                           position: "absolute",
                           right: 10,
-                          bottom: 10,
+                          bottom: 30, // clears the char counter row below the textarea
                           width: 36,
                           height: 36,
                           borderRadius: "50%",

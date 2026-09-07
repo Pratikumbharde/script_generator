@@ -544,11 +544,9 @@ html[data-theme="dark"]{
 /* ============================================================
    Self-Improvement (si-)
    ============================================================ */
-.si-view{max-width:900px;margin:0 auto}
-.si-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:24px 34px 0}
-.si-section{margin:16px 34px 0;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.si-section{margin:16px 0 0;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .si-section-title{font-family:'Space Grotesk';font-weight:700;font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:7px;color:var(--ink)}
-.si-stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;padding:0 34px;margin-top:16px}
+.si-stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px}
 .si-stat-card{padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--card);text-align:center}
 .si-stat-num{font-family:'Space Grotesk';font-weight:700;font-size:28px;color:var(--ink)}
 .si-stat-label{font-size:12px;color:var(--muted);margin-top:4px;font-weight:500}

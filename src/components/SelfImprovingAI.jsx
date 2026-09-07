@@ -78,7 +78,6 @@ export default function SelfImprovingAI() {
     <div>
       <div className="ps-top">
         <div>
-          <div className="ps-eyebrow">P3.5</div>
           <div className="ps-title"><TrendingUp size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Self-Improving AI</div>
           <div className="ps-sub">Log outcomes, discover winning patterns, and run A/B tests on prompts.</div>
         </div>

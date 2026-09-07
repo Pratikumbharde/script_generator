@@ -44,7 +44,7 @@ a.lp-link{color:inherit;text-decoration:none}
 .lp-theme:active{transform:scale(.94)}
 
 /* ---------- hero ---------- */
-.lp-hero{padding:84px 0 64px;text-align:center}
+.lp-hero{padding:4px 0 64px;text-align:center}
 .lp-eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;letter-spacing:.14em;
   text-transform:uppercase;color:var(--accent);background:var(--accent-bg);border:1px solid var(--line);
   border-radius:999px;padding:7px 14px;margin-bottom:22px;transition:border-color .2s ease,transform .2s ease}

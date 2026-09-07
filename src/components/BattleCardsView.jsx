@@ -25,7 +25,6 @@ export default function BattleCardsView({ products }) {
     <div>
       <div className="ps-top">
         <div>
-          <div className="ps-eyebrow">P4.1</div>
           <div className="ps-title"><Shield size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Battle Cards</div>
           <div className="ps-sub">Quick-reference competitor intel and counter-messaging.</div>
         </div>

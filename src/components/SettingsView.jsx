@@ -294,7 +294,7 @@ export default function SettingsView() {
   if (loading || !prefs) {
     return (
       <div>
-        <div className="ps-top"><div><div className="ps-eyebrow">P6</div><div className="ps-title"><Settings size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Settings</div></div></div>
+        <div className="ps-top"><div><div className="ps-title"><Settings size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Settings</div></div></div>
         <div className="ps-body"><div className="loading-box"><div className="ring" /><div className="msg">Loading settings…</div></div></div>
       </div>
     );
@@ -304,7 +304,6 @@ export default function SettingsView() {
     <div>
       <div className="ps-top">
         <div>
-          <div className="ps-eyebrow">P6</div>
           <div className="ps-title"><Settings size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Settings</div>
           <div className="ps-sub">Manage your appearance, notifications, email (SMTP + templates), and AI model accounts.</div>
         </div>

@@ -963,6 +963,9 @@ db.exec(`
     SELECT MAX(id) FROM workspace_members GROUP BY workspace_id, user_id
   )
 `)
+// Unique index so the OR IGNORE inserts below (owner bootstrap, invite accept)
+// can't create duplicate memberships on repeated restarts / invites
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ws_members_ws_user ON workspace_members(workspace_id, user_id)`)
 
 /* -- workspace data migration (run after columns exist) -- */
 // create personal workspaces for users without one
@@ -986,10 +989,13 @@ db.prepare(`
   ) WHERE workspace_id IS NULL
 `).run()
 
-// add owner as workspace member
+// add owner as workspace member (only when not already a member)
 db.prepare(`
   INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role, joined_at)
   SELECT w.id, w.owner_user_id, 'owner', CURRENT_TIMESTAMP FROM workspaces w
+  WHERE NOT EXISTS (
+    SELECT 1 FROM workspace_members m WHERE m.workspace_id = w.id AND m.user_id = w.owner_user_id
+  )
 `).run()
 
 /* ---------- helpers ---------- */
@@ -4917,8 +4923,13 @@ Return ONLY valid JSON with these fields:
   "why": "explanation of why this change should improve results, citing patterns from winning vs losing calls",
   "evidence": { "wins": number, "losses": number, "pattern": "description of pattern observed" },
   "confidence_score": 0.0 to 1.0,
-  "measured_uplift": "estimated conversion improvement e.g. +8-12%"
-}`
+  "measured_uplift": estimated conversion improvement ONLY if the win/loss data above includes at least 5 outcomes, otherwise null
+}
+HARD RULES — violations make the output useless:
+- Base every claim ONLY on the win/loss counts and script text provided to you.
+- NEVER invent statistics, benchmark percentages, or study results (no "+X-Y%", no "industry benchmarks").
+- When there are fewer than 5 outcomes, say plainly in "why" that the data is too thin to measure impact and frame the suggestion as a best-practice change to verify with future calls.
+- If you cannot quote a number from the provided data, you have no number.`
 
     const response = await fetchAIModel(cfg, [
       { role: 'system', content: systemPrompt },
@@ -4942,6 +4953,25 @@ Return ONLY valid JSON with these fields:
     }
 
     const { workspaceId } = getUserWorkspaceRole(req.userId)
+
+    // Outcomes are tracked per script row (max 1 data point here), so any
+    // percentage the model produced cannot be "measured" — strip it rather
+    // than store a fabricated benchmark, and cap the confidence to reflect
+    // the tiny sample.
+    const totalOutcomes = (winLoss?.wins || 0) + (winLoss?.losses || 0)
+    if (totalOutcomes < 5) {
+      parsed.measured_uplift = ''
+      if (Number(parsed.confidence_score) > 0.4) parsed.confidence_score = 0.4
+    }
+
+    // Skip storing an exact duplicate of an already-pending suggestion
+    if (parsed.suggestion) {
+      const dup = db.prepare(
+        'SELECT * FROM auto_optimizations WHERE user_id = ? AND script_id IS ? AND applied = 0 AND suggestion = ?'
+      ).get(req.userId, script_id ?? null, parsed.suggestion)
+      if (dup) return res.json({ optimization: dup, generated: parsed, duplicate: true })
+    }
+
     const now = new Date()
     const weekPeriod = `${now.getFullYear()}-W${Math.ceil((now.getDate() + 6 - now.getDay()) / 7)}`
 
@@ -5619,11 +5649,12 @@ app.get('/api/team', requireAuth, (req, res) => {
   if (!ws) return res.status(404).json({ error: 'No workspace found' })
 
   const members = db.prepare(`
-    SELECT u.id, u.email, u.name, u.role, m.role AS workspace_role,
+    SELECT u.id, u.email, u.name, u.role, MAX(m.role) AS workspace_role,
       (SELECT COUNT(*) FROM script_assignments sa WHERE sa.assigned_to = u.id) AS assigned_scripts_count
     FROM workspace_members m
     JOIN users u ON u.id = m.user_id
     WHERE m.workspace_id = ? AND m.joined_at IS NOT NULL
+    GROUP BY u.id
     ORDER BY u.id
   `).all(ws.id)
 

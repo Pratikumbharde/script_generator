@@ -62,7 +62,6 @@ export default function MarketplaceView() {
     <div>
       <div className="ps-top">
         <div>
-          <div className="ps-eyebrow">P3.6</div>
           <div className="ps-title"><Store size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Marketplace</div>
           <div className="ps-sub">Pre-built script templates curated from top-performing sales methodologies.</div>
         </div>

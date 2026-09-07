@@ -232,7 +232,7 @@ export default function VoiceDNA() {
             <div className="ps-empty">
               <div className="big">No documents yet</div>
               <p>Add pitch decks, emails, call transcripts, or brand guides so the AI can learn your company's voice.</p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button className="ps-btn ghost" onClick={() => setUploadingRecording(true)}>
                   <Upload size={16} /> Upload Recording
                 </button>
