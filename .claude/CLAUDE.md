@@ -88,6 +88,7 @@ JWT_SECRET=***
 - `POST /chat` — Ollama proxy
 
 ## Development Notes
+- **URL routing**: every page has a URL path (`/products`, `/studio`, `/scripts`, `/product/:id`, `/product/:id/edit`, `/call-analysis?script=:id`, auth at `/`, `/login`, `/register` — full map in `ROUTE_PATHS` in app.jsx). `setView` in app.jsx is the single navigation funnel — it sets state AND pushes the route; all redirects (Sidebar, TourGuide, product flows) go through it. popstate + initial-path parsing make back/forward, refresh, and deep links work. Deep-linked product ids resolve from the products list once loaded.
 - The S storage helper in app.jsx is now API-backed — it translates old localStorage calls into REST API calls
 - Script generation uses unique index on config combination for upsert behavior
 - JWT expires in 7 days

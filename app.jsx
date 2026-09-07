@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { X } from "lucide-react";
 import LoginView from "./src/components/LoginView.jsx";
 import LandingPage from "./src/components/LandingPage.jsx";
@@ -59,6 +59,55 @@ const AutoOptimizationView  = lazyWithReload(() => import("./src/components/Auto
 const HeatmapView           = lazyWithReload(() => import("./src/components/HeatmapView.jsx"));
 const LeaderboardView       = lazyWithReload(() => import("./src/components/LeaderboardView.jsx"));
 
+/* ---------- URL routing ----------
+   Every page has a real URL path. `setView` is the single navigation funnel:
+   it updates state AND pushes the matching route, so browser back/forward,
+   refresh and shareable deep links all work. */
+const ROUTE_PATHS = {
+  products: "/products",
+  product: "/product",           // /product/:id for deep links
+  add: "/products/new",          // /product/:id/edit for edit mode
+  studio: "/studio",
+  scripts: "/scripts",
+  training: "/training",
+  practice: "/practice",
+  roleplay: "/roleplay",
+  components: "/components",
+  battle: "/battle-cards",
+  analytics: "/analytics",
+  coaching: "/coaching",
+  competitor: "/competitors",
+  dealscore: "/deal-scores",
+  heatmap: "/conversation-intelligence",
+  analysis: "/call-analysis",    // ?script=:id when opened from studio
+  refinement: "/script-refinement",
+  auto_opt: "/ai-optimization",
+  selfimprove: "/self-improvement",
+  abtesting: "/ab-testing",
+  voice: "/voice-dna",
+  team: "/team",
+  leaderboard: "/leaderboard",
+  schedule: "/scheduled-calls",
+  permissions: "/permissions",
+  export: "/export",
+  automation: "/automation-rules",
+  settings: "/settings",
+};
+const ROUTE_VIEWS = Object.fromEntries(Object.entries(ROUTE_PATHS).map(([v, p]) => [p, v]));
+const AUTH_PATHS = { "/": "landing", "/login": "auth", "/register": "auth-register" };
+const AUTH_ROUTE_FOR_SCREEN = { landing: "/", auth: "/login", "auth-register": "/register" };
+const normalizePath = (p) => (String(p || "/").replace(/\/+$/, "") || "/");
+
+// URL path → { view, id }. `view` null means "/" (use saved/default view) or unknown.
+function parseRoute(pathname) {
+  const p = normalizePath(pathname);
+  if (p === "/") return { view: null, id: null };
+  let m;
+  if ((m = p.match(/^\/product\/([^/]+)\/edit$/))) return { view: "add", id: m[1] };
+  if ((m = p.match(/^\/product\/([^/]+)$/))) return { view: "product", id: m[1] };
+  return { view: ROUTE_VIEWS[p] || null, id: null };
+}
+
 /* ============================================================
    Pitch Studio — a live-call cockpit for sales teams.
    Enter a product once → pick methodology + call type + duration →
@@ -73,17 +122,25 @@ export default function PitchStudio() {
   const [ready, setReady] = useState(false);
   // Public landing page before auth; 'auth' shows the login/register form.
   // Password-reset email links (?resetToken=…) skip the landing entirely.
-  const [authScreen, setAuthScreen] = useState(() =>
-    new URLSearchParams(window.location.search).get("resetToken") ? "auth" : "landing"
-  );
+  const [authScreen, setAuthScreen] = useState(() => {
+    const p = normalizePath(window.location.pathname);
+    if (AUTH_PATHS[p]) return AUTH_PATHS[p];
+    return new URLSearchParams(window.location.search).get("resetToken") ? "auth" : "landing";
+  });
   const [company, setCompany] = useState("");
-  const [view, setView] = useState(() => {
+  // Deep-linked product id from the URL (/product/:id, /product/:id/edit),
+  // resolved once the products list loads.
+  const initialRoute = parseRoute(window.location.pathname);
+  const routeIdRef = useRef(initialRoute.id || null);
+  const [view, setViewState] = useState(() => {
+    if (initialRoute.view) return initialRoute.view;
     // Members default to scripts view
     const saved = localStorage.getItem('ps_view');
     return saved || 'products';
   }); // products | product | add | studio | team | scripts | training | practice | roleplay | components | battle | analytics | schedule | settings | automation | export | permissions | coaching | abtesting | selfimprove | leaderboard | competitor | dealscore | refinement | auto_opt | heatmap | voice
-  // Persist current view so refresh stays on the same page
-  useEffect(() => { localStorage.setItem('ps_view', view); }, [view]);
+  // Persist current view so refresh stays on the same page (only while
+  // signed in — logged-out page loads shouldn't poison the saved view)
+  useEffect(() => { if (user) localStorage.setItem('ps_view', view); }, [view, user]);
 
   // Auto-refresh products & staff when navigating to views that depend on them
   useEffect(() => {
@@ -100,7 +157,9 @@ export default function PitchStudio() {
   const [studioNonce, setStudioNonce] = useState(0);
   const [staff, setStaff] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [analysisScriptId, setAnalysisScriptId] = useState(null); // for navigating to analysis from studio
+  const [analysisScriptId, setAnalysisScriptId] = useState(
+    () => new URLSearchParams(window.location.search).get("script") || null // for navigating to analysis from studio
+  );
 
   // P2.1: PWA install prompt
   const [installPrompt, setInstallPrompt] = useState(null);
@@ -150,6 +209,102 @@ export default function PitchStudio() {
   const teamLanguages = [...new Set(staff.flatMap((s) => s.languages || ["en"]))];
   const isMember = user?.role === 'member';
 
+  /* ---------- URL <-> view sync ---------- */
+  // Current state for product ids, readable inside setView without stale closures
+  const selectedProductRef = useRef(null);
+  selectedProductRef.current = selectedProduct;
+  const editingProductRef = useRef(null);
+  editingProductRef.current = editingProduct;
+
+  const pathForView = (v, opts = {}) => {
+    // opts.productId lets callers pass the id synchronously (the setter in
+    // the same handler hasn't re-rendered the ref mirror yet)
+    if (v === "product") {
+      const p = opts.productId !== undefined ? { id: opts.productId } : selectedProductRef.current;
+      return p?.id ? `/product/${p.id}` : ROUTE_PATHS.products;
+    }
+    if (v === "add") {
+      const p = opts.productId !== undefined ? { id: opts.productId } : editingProductRef.current;
+      return p?.id ? `/product/${p.id}/edit` : ROUTE_PATHS.add;
+    }
+    if (v === "analysis") {
+      const sid = opts.script !== undefined ? opts.script : analysisScriptId;
+      return sid ? `${ROUTE_PATHS.analysis}?script=${sid}` : ROUTE_PATHS.analysis;
+    }
+    return ROUTE_PATHS[v] || "/";
+  };
+
+  // Single navigation funnel: every redirect (sidebar, tour, product flows,
+  // practice, member guard…) goes through here and updates the URL too.
+  const setView = (v, opts = {}) => {
+    setViewState(v);
+    const path = pathForView(v, opts);
+    if (window.location.pathname + window.location.search !== path) {
+      window.history.pushState({ view: v }, "", path);
+    }
+  };
+
+  // Auth screens (landing / login / register) get their own URL paths
+  const goAuthScreen = (screen) => {
+    setAuthScreen(screen);
+    const path = AUTH_ROUTE_FOR_SCREEN[screen] || "/";
+    if (window.location.pathname !== path) {
+      window.history.pushState({ auth: screen }, "", path);
+    }
+  };
+
+  // Browser back/forward — re-derive the view (and auth screen) from the URL
+  useEffect(() => {
+    const onPop = () => {
+      const { view: v, id } = parseRoute(window.location.pathname);
+      routeIdRef.current = id || null;
+      // Deep link to a different product than the one currently held → re-resolve
+      setSelectedProduct((cur) => (v === "product" && id && String(cur?.id ?? "") !== String(id) ? null : cur));
+      setEditingProduct((cur) => (v === "add" && id && String(cur?.id ?? "") !== String(id) ? null : cur));
+      setAnalysisScriptId(new URLSearchParams(window.location.search).get("script") || null);
+      const authScr = AUTH_PATHS[normalizePath(window.location.pathname)];
+      if (authScr) setAuthScreen(authScr);
+      setViewState(v || localStorage.getItem("ps_view") || "products");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Resolve deep-linked product ids (e.g. /product/12, /product/12/edit)
+  // once the products list is available.
+  useEffect(() => {
+    if (!ready || !routeIdRef.current) return;
+    const pid = routeIdRef.current;
+    if (view === "product" && !selectedProduct) {
+      const p = products.find((x) => String(x.id) === String(pid));
+      if (p) { routeIdRef.current = null; setSelectedProduct(p); }
+    } else if (view === "add" && pid && !editingProduct) {
+      const p = products.find((x) => String(x.id) === String(pid));
+      if (p) { routeIdRef.current = null; setEditingProduct(p); }
+    }
+  }, [ready, view, products, selectedProduct, editingProduct]);
+
+  // Once authenticated, normalize the URL to the active view — covers
+  // /login or /register after sign-in, root "/", and unknown paths.
+  // Skipped while a deep-linked product id is still resolving.
+  useEffect(() => {
+    if (!user || !ready || routeIdRef.current) return;
+    const target = pathForView(view);
+    if (window.location.pathname + window.location.search !== target) {
+      window.history.replaceState({ view }, "", target);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, ready]);
+
+  // Logged out again (logout / expired session) → back to the public root
+  useEffect(() => {
+    if (user || authLoading) return;
+    if (!AUTH_PATHS[normalizePath(window.location.pathname)]) {
+      window.history.replaceState({}, "", "/");
+      setAuthScreen("landing");
+    }
+  }, [user, authLoading]);
+
   // Redirect members to scripts view on mount if they're on products/studio
   useEffect(() => {
     if (user && isMember && (view === 'products' || view === 'product' || view === 'add')) {
@@ -172,13 +327,17 @@ export default function PitchStudio() {
     <div className="ps-root"><style>{STYLES}</style>
       {authScreen === "landing" ? (
         <LandingPage
-          onSignIn={() => setAuthScreen("auth")}
-          onRegister={() => setAuthScreen("auth-register")}
+          onSignIn={() => goAuthScreen("auth")}
+          onRegister={() => goAuthScreen("auth-register")}
         />
       ) : (
         <LoginView
           initialMode={authScreen === "auth-register" ? "register" : "login"}
-          onBack={() => setAuthScreen("landing")}
+          onBack={() => goAuthScreen("landing")}
+          onModeChange={(m) => {
+            if (m === "register") goAuthScreen("auth-register");
+            else if (m === "login") goAuthScreen("auth");
+          }}
         />
       )}
     </div>
@@ -204,20 +363,20 @@ export default function PitchStudio() {
           <Suspense fallback={<div style={{ padding: 40 }}><CardSkeleton count={4} /></div>}>
           {view === "products" && (
             <ProductsView products={products} company={company}
-              onOpen={(p) => { setSelectedProduct(p); setView("product"); }}
-              onAdd={() => { setEditingProduct(null); setView("add"); }}
+              onOpen={(p) => { setSelectedProduct(p); setView("product", { productId: p.id }); }}
+              onAdd={() => { setEditingProduct(null); setView("add", { productId: null }); }}
               onSetup={saveCompany}
-              onEdit={(p) => { setEditingProduct(p); setView("add"); }}
+              onEdit={(p) => { setEditingProduct(p); setView("add", { productId: p.id }); }}
               onDelete={async (p) => { await S.del(`pproduct:${p.id}`); await refreshProducts(); }}
-              onDuplicate={(p) => { setEditingProduct({ ...p, id: null, name: p.name + " (copy)" }); setView("add"); }} />
+              onDuplicate={(p) => { setEditingProduct({ ...p, id: null, name: p.name + " (copy)" }); setView("add", { productId: null }); }} />
           )}
           {view === "product" && selectedProduct && (
             <ProductDetail product={selectedProduct}
               onBack={async () => { setSelectedProduct(null); await refreshProducts(); setView("products"); }}
               onOpenStudio={() => openStudio(selectedProduct)}
-              onEdit={() => { setEditingProduct(selectedProduct); setView("add"); }}
+              onEdit={() => { setEditingProduct(selectedProduct); setView("add", { productId: selectedProduct.id }); }}
               onDelete={async (p) => { await S.del(`pproduct:${p.id}`); setSelectedProduct(null); await refreshProducts(); setView("products"); }}
-              onDuplicate={(p) => { setEditingProduct({ ...p, id: null, name: p.name + " (copy)" }); setView("add"); }} />
+              onDuplicate={(p) => { setEditingProduct({ ...p, id: null, name: p.name + " (copy)" }); setView("add", { productId: null }); }} />
           )}
           {view === "add" && (
             <ProductForm product={editingProduct} onCancel={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} onSaved={async () => { setEditingProduct(null); await refreshProducts(); setView("products"); }} />
@@ -233,7 +392,7 @@ export default function PitchStudio() {
               staff={staff}
               onBack={() => setView("products")}
               canGenerate={canGenerate}
-              onAnalyze={(script) => { setAnalysisScriptId(script?.id || null); setView("analysis"); }}
+              onAnalyze={(script) => { setAnalysisScriptId(script?.id || null); setView("analysis", { script: script?.id || null }); }}
             />
           )}
           {view === "scripts" && (

@@ -27,7 +27,7 @@ function validateCompany(v) {
   return ''
 }
 
-export default function LoginView({ initialMode = 'login', onBack }) {
+export default function LoginView({ initialMode = 'login', onBack, onModeChange }) {
   const { setAuth } = useAuth()
   const [mode, setMode] = useState(initialMode) // 'login' | 'register' | 'forgot' | 'reset'
   const [email, setEmail] = useState('')
@@ -168,6 +168,8 @@ export default function LoginView({ initialMode = 'login', onBack }) {
     setInfo('')
     setTouched({})
     setFormErrors({})
+    // Keep the URL path in sync with the visible mode
+    onModeChange?.(newMode)
     // Retain entered data when switching modes
     // Don't clear email, password, or company
   }
