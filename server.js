@@ -117,6 +117,68 @@ app.use(express.json({ limit: '1mb' })) // landing_json + branding fields; image
 
 /* ---------- Serve frontend in production ---------- */
 const DIST_PATH = path.join(__dirname, 'dist')
+
+/* ---------- Dynamic index.html: inject branding into <title>/<meta> ----------
+   React updates title/meta only after JS loads, so crawlers, link previews
+   and view-source would always see the hardcoded defaults. Instead, both the
+   root route and the SPA fallback below serve a branded copy of dist/index.html
+   built from the site settings saved in Admin → Settings. */
+const BRAND_HTML_TTL = 15000
+let brandHtml = { raw: null, at: 0, branded: null }
+
+const escapeHtmlAttr = (s) =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/* Replace (or append) <meta name|property="key" content="..."> in the HTML. */
+function upsertMetaTag(html, kind, key, content) {
+  const tag = `<meta ${kind}="${key}" content="${escapeHtmlAttr(content)}" />`
+  const re = new RegExp(`<meta[^>]*${kind}="${key}"[^>]*>`)
+  if (re.test(html)) return html.replace(re, tag)
+  return html.replace('</head>', `  ${tag}\n  </head>`)
+}
+
+function brandedIndexHtml() {
+  if (!brandHtml.raw) {
+    try { brandHtml.raw = fs.readFileSync(path.join(DIST_PATH, 'index.html'), 'utf8') } catch { return null }
+  }
+  if (!brandHtml.branded || Date.now() - brandHtml.at > BRAND_HTML_TTL) {
+    const s = getSiteSettings() || {}
+    const name = s.site_name || 'Pitch Studio'
+    const description = s.meta_description || s.site_tagline || 'AI sales script generator for high-performing teams'
+    let html = brandHtml.raw
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtmlAttr(name)}</title>`)
+    html = upsertMetaTag(html, 'name', 'description', description)
+    if (s.meta_keywords) html = upsertMetaTag(html, 'name', 'keywords', s.meta_keywords)
+    html = upsertMetaTag(html, 'name', 'apple-mobile-web-app-title', name)
+    html = upsertMetaTag(html, 'property', 'og:site_name', name)
+    html = upsertMetaTag(html, 'property', 'og:title', name)
+    html = upsertMetaTag(html, 'property', 'og:description', description)
+    html = upsertMetaTag(html, 'property', 'og:type', 'website')
+    html = upsertMetaTag(html, 'name', 'twitter:card', 'summary')
+    html = upsertMetaTag(html, 'name', 'twitter:title', name)
+    html = upsertMetaTag(html, 'name', 'twitter:description', description)
+    const img = s.logo_data || s.favicon_data
+    if (img) {
+      html = upsertMetaTag(html, 'property', 'og:image', img)
+      html = upsertMetaTag(html, 'name', 'twitter:image', img)
+    }
+    // Saved favicon/logo → swap the default <link rel="icon"> href (data URIs
+    // are base64 — no quotes, safe to inline; values are validated on save).
+    const fav = s.favicon_data || s.logo_data
+    if (fav) html = html.replace(/<link rel="icon" href="[^"]*"/, `<link rel="icon" href="${fav}"`)
+    brandHtml.branded = html
+    brandHtml.at = Date.now()
+  }
+  return brandHtml.branded
+}
+
+/* "/" — intercept before express.static so the branded HTML is served. */
+app.get('/', (req, res) => {
+  const html = brandedIndexHtml()
+  if (html) return res.type('html').send(html)
+  res.sendFile(path.join(DIST_PATH, 'index.html'))
+})
+
 app.use(express.static(DIST_PATH, {
   setHeaders: (res, filePath) => {
     // Ensure correct MIME types for JS modules (fixes Render deployment)
@@ -2343,6 +2405,7 @@ app.put('/api/branding', requireAuth, requireRole('admin', 'manager'), (req, res
   if (sets.length) {
     sets.push('updated_at = CURRENT_TIMESTAMP')
     db.prepare(`UPDATE site_settings SET ${sets.join(', ')} WHERE id = 1`).run(...vals)
+    brandHtml.branded = null // re-render the branded index.html immediately
   }
   const s = getSiteSettings()
   const out = {}
@@ -6169,6 +6232,8 @@ app.get('/{*splat}', (req, res) => {
   if (req.path.startsWith('/api') || req.path.match(/\.\w+$/)) {
     return res.status(404).send('Not found')
   }
+  const html = brandedIndexHtml()
+  if (html) return res.type('html').send(html)
   res.sendFile(path.join(DIST_PATH, 'index.html'))
 })
 

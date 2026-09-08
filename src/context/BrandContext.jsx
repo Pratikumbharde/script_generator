@@ -42,6 +42,22 @@ function applyToDocument(branding) {
   setMeta('meta[name="keywords"]', 'content', branding.meta_keywords || DEFAULT_BRANDING.meta_keywords)
   setMeta('meta[name="apple-mobile-web-app-title"]', 'content', name)
 
+  // Social preview tags — kept in sync with the server-side injection in
+  // server.js (brandedIndexHtml) so client-side navigation matches view-source.
+  const description = branding.meta_description || DEFAULT_BRANDING.meta_description
+  setMeta('meta[property="og:site_name"]', 'content', name)
+  setMeta('meta[property="og:title"]', 'content', name)
+  setMeta('meta[property="og:description"]', 'content', description)
+  setMeta('meta[property="og:type"]', 'content', 'website')
+  setMeta('meta[name="twitter:card"]', 'content', 'summary')
+  setMeta('meta[name="twitter:title"]', 'content', name)
+  setMeta('meta[name="twitter:description"]', 'content', description)
+  const brandImg = branding.logo_data || branding.favicon_data
+  if (brandImg) {
+    setMeta('meta[property="og:image"]', 'content', brandImg)
+    setMeta('meta[name="twitter:image"]', 'content', brandImg)
+  }
+
   // Favicon: saved favicon → saved logo → the shipped default icon.
   const iconHref = branding.favicon_data || branding.logo_data || '/icons/icon-192.png'
   let icon = document.head.querySelector('link[rel="icon"]')
