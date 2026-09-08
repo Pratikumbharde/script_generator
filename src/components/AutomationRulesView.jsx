@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Zap } from "lucide-react";
 import { listAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule } from "../api/client.js";
+import { useBrand } from "../context/BrandContext.jsx";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
 
@@ -78,6 +79,7 @@ function validatePayload(value) {
 }
 
 export default function AutomationRulesView() {
+  const { branding } = useBrand();
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -209,7 +211,7 @@ export default function AutomationRulesView() {
         {!loading && rules.length === 0 && (
           <div className="ps-empty">
             <div className="big">No automation rules yet</div>
-            <p>Connect Pitch Studio to your tools. When events happen, we'll send data automatically.</p>
+            <p>Connect {branding.site_name} to your tools. When events happen, we'll send data automatically.</p>
             <button className="ps-btn pri" onClick={() => setShowForm(true)}>+ Create your first rule</button>
           </div>
         )}

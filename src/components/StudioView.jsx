@@ -167,8 +167,8 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   const [customPersona, setCustomPersona] = useState(preset && !presetPersonaListed && preset.persona ? preset.persona : "");
   const [personaTemplate, setPersonaTemplate] = useState(null); // P2.4: rich persona template
   const [showPersonaDetail, setShowPersonaDetail] = useState(false);
-  // language generation mode: "single" | "team" | "custom"
-  const [langMode, setLangMode] = useState(teamLanguages.length > 1 ? "team" : "single");
+  // language generation mode: "default" (English + Hindi) | "single" | "team" | "custom"
+  const [langMode, setLangMode] = useState("default");
   const [customLangs, setCustomLangs] = useState(() => [preset?.language || "en"]);
   const [script, setScript] = useState(null);
   const [savedExists, setSavedExists] = useState(false);
@@ -203,6 +203,9 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
 
   // which languages will actually get generated when the user hits Generate
   const languagesToGenerate = (() => {
+    // "default": English + Hindi only (lowest token cost, most reliable) —
+    // the primary language joins the set; more languages are opt-in via pills.
+    if (langMode === "default") return [...new Set([language, "en", "hi", ...customLangs])];
     if (langMode === "single") return [language];
     if (langMode === "team") return teamLanguages.length ? [...new Set([language, ...teamLanguages])] : [language];
     return [...new Set([language, ...customLangs])]; // "custom"
@@ -452,6 +455,10 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
             <div className="sel-block">
               <div className="sel-head">5 · Generate in which languages? <span className="sel-note">— so reps can switch mid-call if the buyer switches</span></div>
               <div className="lang-modes">
+                <div className={`lang-mode ${langMode === "default" ? "on" : ""}`} onClick={() => setLangMode("default")}>
+                  <div className="lm-h">⚡ English &amp; Hindi <span className="chip n" style={{ marginLeft: 4 }}>Default</span></div>
+                  <div className="lm-b">Generates English and Hindi only — the most reliable. Add other languages below when you need them.</div>
+                </div>
                 <div className={`lang-mode ${langMode === "single" ? "on" : ""}`} onClick={() => setLangMode("single")}>
                   <div className="lm-h">🗣 Just the primary language</div>
                   <div className="lm-b">Fastest and cheapest. One script in {lObj.name}.</div>
@@ -465,17 +472,18 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
                   <div className="lm-b">Choose exactly which languages to generate right now.</div>
                 </div>
               </div>
-              {langMode === "custom" && (
+              {(langMode === "default" || langMode === "custom") && (
                 <div className="pill-row" style={{ marginTop: 12 }}>
                   {LANGUAGES.map((l) => {
-                    const on = customLangs.includes(l.id) || l.id === language;
+                    const autoOn = langMode === "default" && (l.id === "en" || l.id === "hi");
+                    const on = customLangs.includes(l.id) || l.id === language || autoOn;
                     const primary = l.id === language;
                     return (
                       <div key={l.id}
                         className={`pill ${on ? "on" : ""} ${primary ? "primary" : ""}`}
-                        title={primary ? "Primary language — always generated" : ""}
+                        title={primary ? "Primary language — always generated" : autoOn ? "Included by default in this mode" : "Click to include in this generation"}
                         onClick={() => {
-                          if (primary) return;
+                          if (primary || autoOn) return;
                           setCustomLangs((cs) => cs.includes(l.id) ? cs.filter((x) => x !== l.id) : [...cs, l.id]);
                         }}>
                         {primary ? "★ " : ""}{l.name}

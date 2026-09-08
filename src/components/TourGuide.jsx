@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { TOUR_STEPS } from '../data/tourSteps.js'
 import { consumeTourRequest } from '../utils/tourSignal.js'
+import { useBrand, withSiteName } from '../context/BrandContext.jsx'
 import { X, ArrowRight, ArrowLeft, Compass } from 'lucide-react'
 
 /* ============================================================
@@ -69,6 +70,7 @@ const TOUR_CSS = `
 `
 
 export default function TourGuide({ view, setView, user, canGenerate }) {
+  const { branding } = useBrand()
   const [running, setRunning] = useState(false)
   const [idx, setIdx] = useState(0)
   const [rect, setRect] = useState(null)
@@ -239,8 +241,8 @@ export default function TourGuide({ view, setView, user, canGenerate }) {
         <button className="tg-skip" onClick={() => finish()} aria-label="Skip tour"><X size={15} /></button>
         {step.centered && <div className="tg-icon"><Compass size={22} /></div>}
         {step.group && <div className="tg-group"><Compass size={11} />{step.group}</div>}
-        <div className="tg-title">{step.title}</div>
-        <div className="tg-body">{step.body}</div>
+        <div className="tg-title">{withSiteName(step.title, branding.site_name)}</div>
+        <div className="tg-body">{withSiteName(step.body, branding.site_name)}</div>
         <div className="tg-meta">
           <span className="tg-count">{idx + 1} / {steps.length}</span>
           <div className="tg-btns">

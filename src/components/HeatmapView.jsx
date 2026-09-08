@@ -8,6 +8,7 @@ import {
   getCICalls,
 } from "../api/client.js";
 import { requestPractice } from "../utils/practiceSignal.js";
+import { useBrand } from "../context/BrandContext.jsx";
 import {
   Activity,
   BarChart3,
@@ -101,6 +102,7 @@ function formatDate(ts) {
 }
 
 export default function ConversationIntelligenceView({ onPractice }) {
+  const { branding } = useBrand();
   const [tab, setTab] = useState("overview");
   const [, setTick] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -351,7 +353,7 @@ export default function ConversationIntelligenceView({ onPractice }) {
         <p style={{ color: "var(--muted)", fontSize: 14, maxWidth: 460, margin: "0 auto 24px", lineHeight: 1.55 }}>
           {hasCalls
             ? `You have ${overview.totalCalls} call${overview.totalCalls === 1 ? "" : "s"} with outcomes. Run conversation intelligence analysis to discover which phrases correlate with wins and losses.`
-            : "Mark scripts as Won or Lost in the Call Studio or Scripts view. Once you have outcomes, Pitch Studio can analyze which language patterns drive results."}
+            : `Mark scripts as Won or Lost in the Call Studio or Scripts view. Once you have outcomes, ${branding.site_name} can analyze which language patterns drive results.`}
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           {hasCalls && (

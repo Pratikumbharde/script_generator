@@ -101,3 +101,10 @@ export function BrandProvider({ children }) {
 export function useBrand() {
   return useContext(BrandContext)
 }
+
+/* Replace the hardcoded default product name in copy (tour steps, landing
+   text, empty states…) with the admin's saved site name. */
+export function withSiteName(text, siteName) {
+  const name = siteName || DEFAULT_BRANDING.site_name
+  return String(text || '').split('Pitch Studio').join(name)
+}

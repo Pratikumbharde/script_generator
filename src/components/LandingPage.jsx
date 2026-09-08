@@ -3,7 +3,7 @@ import {
   ArrowRight, Check, Zap, Timer, Languages, Shield, BarChart3,
   MessageSquareText, Users, MapPin, Sparkles, Sun, Moon,
 } from 'lucide-react'
-import { useBrand } from '../context/BrandContext.jsx'
+import { useBrand, withSiteName } from '../context/BrandContext.jsx'
 
 /* ============================================================
    LandingPage — public marketing page shown before auth.
@@ -308,9 +308,9 @@ export default function LandingPage({ onSignIn, onRegister }) {
       <section className="lp-section lp-section-tint">
         <div className="lp-inner lp-split">
           <div>
-            <div className="lp-kicker lp-reveal">{landing.what.kicker}</div>
+            <div className="lp-kicker lp-reveal">{withSiteName(landing.what.kicker, siteName)}</div>
             <h2 className="lp-h2 lp-reveal" style={d(1)}>{landing.what.title}</h2>
-            <p className="lp-lead lp-reveal" style={d(2)}>{landing.what.body}</p>
+            <p className="lp-lead lp-reveal" style={d(2)}>{withSiteName(landing.what.body, siteName)}</p>
             <ul className="lp-checklist">
               {landing.what.checklist.map((item, i) => (
                 <li key={i} className="lp-reveal" style={d(i + 3)}><span className="lp-tick"><Check size={12} /></span>{item}</li>
@@ -418,7 +418,7 @@ export default function LandingPage({ onSignIn, onRegister }) {
 
       <footer className="lp-inner lp-footer lp-reveal">
         <BrandMark />
-        <div>{landing.footer_tagline}</div>
+        <div>{withSiteName(landing.footer_tagline, siteName)}</div>
       </footer>
     </div>
   )

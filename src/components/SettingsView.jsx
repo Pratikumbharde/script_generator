@@ -106,6 +106,7 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState({});
   const [smtpTestStatus, setSmtpTestStatus] = useState(null);
+  const [smtpTesting, setSmtpTesting] = useState(false);
   const [showAiForm, setShowAiForm] = useState(false);
   const [showTplForm, setShowTplForm] = useState(false);
   const [editingAiId, setEditingAiId] = useState(null);
@@ -427,11 +428,14 @@ export default function SettingsView() {
   /* ── SMTP Test ── */
   const handleTestSmtp = async () => {
     setSmtpTestStatus(null);
+    setSmtpTesting(true);
     try {
       const res = await testSmtp({ to: prefs?.smtp_from || "" });
       setSmtpTestStatus({ ok: true, msg: res.message || "Test email sent successfully." });
     } catch (e) {
       setSmtpTestStatus({ ok: false, msg: e.message || "SMTP test failed." });
+    } finally {
+      setSmtpTesting(false);
     }
   };
 
@@ -783,8 +787,8 @@ export default function SettingsView() {
 
           {/* Test SMTP */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <button className="ps-btn pri" onClick={handleTestSmtp} disabled={saving}>
-              <Send size={14} /> Test SMTP
+            <button className="ps-btn pri" onClick={handleTestSmtp} disabled={saving || smtpTesting}>
+              {smtpTesting ? (<><span className="spinner" /> Testing…</>) : (<><Send size={14} /> Test SMTP</>)}
             </button>
             {smtpTestStatus && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: smtpTestStatus.ok ? "#1A7F5B" : "#B23237", background: smtpTestStatus.ok ? "#EDF9F2" : "#FDF2F2", border: `1px solid ${smtpTestStatus.ok ? "#C8E9D8" : "#F0C9CA"}`, borderRadius: 10, padding: "8px 14px" }}>

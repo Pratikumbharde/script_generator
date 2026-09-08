@@ -907,6 +907,9 @@ addColumnIfNotExists('user_preferences', 'dg_model', "TEXT DEFAULT 'nova-2'")
 // Voice DNA: toggle setting
 addColumnIfNotExists('user_preferences', 'voice_dna_enabled', 'INTEGER DEFAULT 1')
 
+// P6.2: weekly digest — epoch ms of the last digest actually sent to this user
+addColumnIfNotExists('user_preferences', 'last_digest_sent', 'INTEGER')
+
 // Script ordering & campaigns
 addColumnIfNotExists('scripts', 'sort_order', 'INTEGER DEFAULT 0')
 addColumnIfNotExists('scripts', 'campaign', 'TEXT')
@@ -1663,6 +1666,11 @@ app.post('/api/scripts', requireAuth, canGenerate, (req, res) => {
   const segJson = JSON.stringify(segments || [])
   const objJson = JSON.stringify(objections || [])
 
+  // Same keys as the ON CONFLICT clause — distinguishes a fresh save from an upsert update.
+  const prior = db.prepare(
+    `SELECT id FROM scripts WHERE user_id=? AND product_id=? AND method=? AND call_type=? AND duration=? AND language=? AND region=? AND delivery=? AND simple=? AND persona=?`
+  ).get(req.userId, product_id, method, call_type, duration, language, region, delivery, simple ? 1 : 0, persona || 'general')
+
   const result = db.prepare(
     `INSERT INTO scripts (user_id, workspace_id, visibility, product_id, method, call_type, duration, language, region, delivery, simple, persona, opening, tone_level, tone_guidance, segments_json, objections_json, saved_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1675,6 +1683,7 @@ app.post('/api/scripts', requireAuth, canGenerate, (req, res) => {
   ).get(req.userId, product_id, method, call_type, duration, language, region, delivery, simple ? 1 : 0, persona || 'general').id
 
   const row = db.prepare('SELECT * FROM scripts WHERE id = ?').get(rowId)
+  notifyScriptAlert(row, req.userId, prior ? 'updated' : 'created')
   res.json({
     script: {
       ...row,
@@ -1762,7 +1771,11 @@ app.put('/api/scripts/:id', requireAuth, (req, res) => {
     })
   }
 
+  // Script alerts fire only on content edits — not outcome/notes/sort bookkeeping.
+  const contentChanged = [opening, tone_level, tone_guidance, segments, objections].some((v) => v !== undefined)
+
   const row = db.prepare('SELECT * FROM scripts WHERE id = ?').get(id)
+  if (contentChanged) notifyScriptAlert(row, req.userId, 'updated')
   res.json({
     script: {
       ...row,
@@ -2687,6 +2700,153 @@ async function sendEmail({ userId, to, subject, body, templateSlug, variables })
   return info
 }
 
+/* ---------- P6.2: notification dispatchers (script alerts / call reminders / weekly digest) ---------- */
+
+function firstName(email) {
+  return String(email || '').split('@')[0] || 'there'
+}
+
+// Fire-and-forget script alerts to opted-in workspace teammates (never blocks the save).
+// Private scripts (no workspace) stay private — no alerts.
+function notifyScriptAlert(script, authorId, action) {
+  try {
+    if (!script?.workspace_id) return
+    const author = db.prepare('SELECT email, company_name FROM users WHERE id = ?').get(authorId)
+    if (!author) return
+    const product = script.product_id
+      ? db.prepare('SELECT name FROM products WHERE id = ?').get(script.product_id)
+      : null
+    const scriptTitle = product?.name
+      ? `${product.name} — ${script.method || ''} ${script.call_type || ''}`.replace(/\s+/g, ' ').trim()
+      : (script.method || 'a script')
+    const recipients = db.prepare(`
+      SELECT u.id, u.email, u.company_name
+      FROM workspace_members m
+      JOIN users u ON u.id = m.user_id
+      JOIN user_preferences p ON p.user_id = u.id
+      WHERE m.workspace_id = ? AND m.user_id != ? AND m.joined_at IS NOT NULL
+        AND p.email_script_alerts = 1
+    `).all(script.workspace_id, authorId)
+    for (const r of recipients) {
+      sendEmail({
+        userId: r.id,
+        to: r.email,
+        templateSlug: 'script_alert',
+        variables: {
+          user_name: firstName(r.email),
+          company_name: r.company_name || author.company_name || 'your workspace',
+          author_name: firstName(author.email),
+          action,
+          script_title: scriptTitle,
+        },
+      }).catch((err) => console.warn(`[email] script alert to ${r.email} failed:`, err.message))
+    }
+  } catch (err) {
+    console.warn('[email] script alert dispatch failed:', err.message)
+  }
+}
+
+// Send 15-minute-before reminders for scheduled calls. Runs on a server-side
+// interval; the reminder_sent flag guarantees each call reminds at most once.
+async function sendDueCallReminders(now) {
+  const rows = db.prepare(`
+    SELECT sc.*, u.email AS user_email, u.company_name
+    FROM scheduled_calls sc
+    JOIN users u ON u.id = sc.user_id
+    JOIN user_preferences p ON p.user_id = sc.user_id
+    WHERE sc.status = 'scheduled' AND sc.reminder_sent = 0
+      AND p.email_call_reminders = 1
+      AND sc.scheduled_at > ? AND sc.scheduled_at <= ?
+    ORDER BY sc.scheduled_at ASC
+  `).all(now, now + 15 * 60 * 1000)
+  for (const call of rows) {
+    // Mark attempted first — a failed send must not retry every minute for a
+    // reminder that is time-sensitive anyway (the window has passed on retry).
+    db.prepare('UPDATE scheduled_calls SET reminder_sent = 1 WHERE id = ?').run(call.id)
+    try {
+      await sendEmail({
+        userId: call.user_id,
+        to: call.user_email,
+        templateSlug: 'call_reminder',
+        variables: {
+          user_name: firstName(call.user_email),
+          company_name: call.company_name || 'your workspace',
+          prospect_name: call.prospect_name || 'your prospect',
+          prospect_company: call.prospect_company || '',
+          scheduled_time: new Date(call.scheduled_at).toLocaleString(),
+          call_type: call.call_type || 'sales',
+        },
+      })
+    } catch (err) {
+      console.warn(`[email] call reminder for call #${call.id} failed:`, err.message)
+    }
+  }
+}
+
+// Monday 00:00 local server time of the week containing `now`.
+function startOfWeekMonday(now) {
+  const d = new Date(now)
+  const diff = d.getDay() === 0 ? 6 : d.getDay() - 1
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - diff)
+  return d.getTime()
+}
+
+async function sendWeeklyDigests(now) {
+  const weekStart = startOfWeekMonday(now)
+  const users = db.prepare(`
+    SELECT u.id, u.email, u.company_name
+    FROM users u
+    JOIN user_preferences p ON p.user_id = u.id
+    WHERE p.email_weekly_digest = 1 AND (p.last_digest_sent IS NULL OR p.last_digest_sent < ?)
+  `).all(weekStart)
+  for (const u of users) {
+    const scriptsCount = db.prepare('SELECT COUNT(*) AS c FROM scripts WHERE user_id = ? AND saved_at >= ?').get(u.id, weekStart).c
+    const callsMade = db.prepare("SELECT COUNT(*) AS c FROM scheduled_calls WHERE user_id = ? AND status = 'completed' AND scheduled_at >= ?").get(u.id, weekStart).c
+    const decided = db.prepare("SELECT COUNT(*) AS c FROM scripts WHERE user_id = ? AND outcome IN ('won','lost','no_deal')").get(u.id).c
+    const won = db.prepare("SELECT COUNT(*) AS c FROM scripts WHERE user_id = ? AND outcome = 'won'").get(u.id).c
+    const winRate = decided > 0 ? Math.round((won / decided) * 100) : 0
+    try {
+      await sendEmail({
+        userId: u.id,
+        to: u.email,
+        templateSlug: 'weekly_digest',
+        variables: {
+          user_name: firstName(u.email),
+          company_name: u.company_name || 'your workspace',
+          scripts_count: String(scriptsCount),
+          calls_made: String(callsMade),
+          win_rate: String(winRate),
+        },
+      })
+      db.prepare('UPDATE user_preferences SET last_digest_sent = ? WHERE user_id = ?').run(now, u.id)
+    } catch (err) {
+      // last_digest_sent stays unset — the user is retried on the next digest pass.
+      console.warn(`[email] weekly digest to ${u.email} failed:`, err.message)
+    }
+  }
+}
+
+// One server-side tick per minute drives both time-based notifications.
+function startEmailSchedulers() {
+  let lastDigestWeek = 0
+  setInterval(() => {
+    try {
+      const now = Date.now()
+      sendDueCallReminders(now).catch((err) => console.warn('[email] reminder pass failed:', err.message))
+      const d = new Date(now)
+      const weekStart = startOfWeekMonday(now)
+      // Digests: attempt once per week, Monday mornings (local server time).
+      if (d.getDay() === 1 && d.getHours() >= 8 && weekStart !== lastDigestWeek) {
+        lastDigestWeek = weekStart
+        sendWeeklyDigests(now).catch((err) => console.warn('[email] digest pass failed:', err.message))
+      }
+    } catch (err) {
+      console.warn('[email] scheduler tick failed:', err.message)
+    }
+  }, 60 * 1000)
+}
+
 app.get('/api/email-templates', requireAuth, (req, res) => {
   seedDefaultTemplates(req.userId)
   const rows = db.prepare('SELECT id, name, slug, subject, body, description, variables, active, created_at FROM email_templates WHERE user_id = ? ORDER BY created_at DESC').all(req.userId)
@@ -3054,18 +3214,20 @@ function extractStreamChunk(provider, data) {
   return data.message?.content || data.response || ''
 }
 
-/* Build request and call upstream AI model. Returns raw fetch Response. */
-async function fetchAIModel(cfg, messages, stream = false) {
+/* Build request and call upstream AI model. Returns raw fetch Response.
+   jsonMode: ask the provider to constrain decoding to valid JSON — used by
+   script generation, where a truncated/loose reply cannot be parsed. */
+async function fetchAIModel(cfg, messages, stream = false, jsonMode = false) {
   let url, headers = { 'Content-Type': 'application/json' }, body
 
   if (cfg.provider === 'openai') {
     url = `${(cfg.baseUrl || 'https://api.openai.com').replace(/\/+$/, '')}/v1/chat/completions`
     headers['Authorization'] = `Bearer ${cfg.apiKey}`
-    body = JSON.stringify({ model: cfg.model, messages, stream })
+    body = JSON.stringify({ model: cfg.model, messages, stream, ...(jsonMode ? { response_format: { type: 'json_object' } } : {}) })
   } else if (cfg.provider === 'deepseek') {
     url = `${(cfg.baseUrl || 'https://api.deepseek.com').replace(/\/+$/, '')}/chat/completions`
     headers['Authorization'] = `Bearer ${cfg.apiKey}`
-    body = JSON.stringify({ model: cfg.model, messages, stream })
+    body = JSON.stringify({ model: cfg.model, messages, stream, ...(jsonMode ? { response_format: { type: 'json_object' } } : {}) })
   } else if (cfg.provider === 'anthropic') {
     url = `${(cfg.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '')}/v1/messages`
     headers['x-api-key'] = cfg.apiKey
@@ -3076,7 +3238,7 @@ async function fetchAIModel(cfg, messages, stream = false) {
   } else {
     url = `${cfg.baseUrl || OLLAMA_BASE_URL}/api/chat`
     if (cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`
-    body = JSON.stringify({ model: cfg.model, messages, stream, think: false, options: { num_ctx: 16384, num_predict: 16384 } })
+    body = JSON.stringify({ model: cfg.model, messages, stream, think: false, ...(jsonMode ? { format: 'json' } : {}), options: { num_ctx: 16384, num_predict: 16384 } })
   }
 
   return fetch(url, { method: 'POST', headers, body })
@@ -3104,8 +3266,8 @@ async function aiComplete(userId, messages, { model = null, stream = false } = {
 app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const cfg = getUserChatConfig(req)
-    const { messages } = req.body
-    const response = await fetchAIModel(cfg, messages, false)
+    const { messages, jsonMode } = req.body
+    const response = await fetchAIModel(cfg, messages, false, !!jsonMode)
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
@@ -3125,8 +3287,8 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 app.post('/api/chat/stream', requireAuth, async (req, res) => {
   try {
     const cfg = getUserChatConfig(req)
-    const { messages } = req.body
-    const response = await fetchAIModel(cfg, messages, true)
+    const { messages, jsonMode } = req.body
+    const response = await fetchAIModel(cfg, messages, true, !!jsonMode)
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
@@ -6018,6 +6180,9 @@ app.use((err, req, res, next) => {
   if (res.headersSent) return next(err)
   res.status(500).json({ error: 'Internal server error', detail: err.message, stack: err.stack?.split('\n').slice(0, 3).join(' ') })
 })
+
+// P6.2: call reminders (every minute) + weekly digests (Monday morning)
+startEmailSchedulers()
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`)

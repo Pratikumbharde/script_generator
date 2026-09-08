@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import LimitedInput from "./shared/LimitedInput.jsx";
 import { listScripts } from "../api/client.js";
+import { useBrand } from "../context/BrandContext.jsx";
 import {
   Search, LayoutGrid, List, Trash2, Pencil, X,
   CheckCircle2, Clock, Sparkles,
@@ -106,6 +107,7 @@ function fmtDate(ts) {
 }
 
 export default function ProductsView({ products, company, onOpen, onAdd, onSetup, onEdit, onDelete, onDuplicate }) {
+  const { branding } = useBrand();
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem("ps_products_view") || "cards"; } catch { return "cards"; }
@@ -513,7 +515,7 @@ export default function ProductsView({ products, company, onOpen, onAdd, onSetup
           <div className="ds-empty-state">
             <div className="icon"><FileText size={24} /></div>
             <h3>No products yet</h3>
-            <p>Add a product with a few details about what it does and who it’s for. Pitch Studio uses that to write your call scripts — once — and saves them for every call after.</p>
+            <p>Add a product with a few details about what it does and who it’s for. {branding.site_name} uses that to write your call scripts — once — and saves them for every call after.</p>
             <div className="actions">
               <button className="ds-btn-pri" onClick={onAdd}><span style={{ fontSize: 16 }}>＋</span> Add your first product</button>
             </div>

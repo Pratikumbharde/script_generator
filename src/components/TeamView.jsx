@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { S, slug } from "../utils/helpers.js";
 import { LANGUAGES } from "../data/constants.js";
 import {
@@ -10,7 +10,7 @@ import {
 } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
-  Users, Shield, UserPlus, Mail, ChevronDown, X, FileText, MoreHorizontal, Check
+  Users, Shield, UserPlus, Mail, ChevronDown, X, FileText, MoreHorizontal, Check, AlertCircle
 } from "lucide-react";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
@@ -35,8 +35,19 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
   const [roleSaving, setRoleSaving] = useState(null);
   const [scripts, setScripts] = useState([]);
   const [assignMenuOpen, setAssignMenuOpen] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
 
   const isAdmin = user?.role === "admin";
+
+  /* Shared save feedback toast — success ("ok") / failure ("bad") */
+  const notify = (type, msg) => {
+    setToast({ type, msg });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   useEffect(() => {
     loadMembers();
@@ -73,12 +84,14 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
     try {
       const data = await inviteTeamMember(inviteEmail.trim(), inviteRole, inviteName.trim() || undefined);
       setInviteMsg(data.message || "Invite sent successfully");
+      notify("ok", data.message || "Invite sent successfully");
       setInviteEmail("");
       setInviteName("");
       setInviteRole("member");
       loadMembers();
     } catch (e) {
       setInviteErr(e.message || "Failed to send invite");
+      notify("bad", e.message || "Failed to send invite");
     } finally {
       setInviteBusy(false);
     }
@@ -90,8 +103,9 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
       await updateTeamRole(userId, newRole);
       setMembers((prev) => prev.map((m) => m.id === userId ? { ...m, role: newRole, workspace_role: newRole === "admin" ? "owner" : newRole } : m));
       setRoleMenuOpen(null);
+      notify("ok", `Role updated to ${newRole}`);
     } catch (e) {
-      alert(e.message || "Failed to update role");
+      notify("bad", e.message || "Failed to update role");
     } finally {
       setRoleSaving(null);
     }
@@ -264,25 +278,33 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
         {/* Workspace settings (existing) */}
         <div className="ps-card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>Workspace settings</div>
-          <WorkspaceSettings workspace={workspace} />
+          <WorkspaceSettings workspace={workspace} notify={notify} />
         </div>
 
         {/* Integrations (existing) */}
         <div className="ps-card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>Integrations</div>
-          <IntegrationsSettings />
+          <IntegrationsSettings notify={notify} />
         </div>
 
         <div style={{ marginTop: 22, fontSize: 12.5, color: "var(--faint)", lineHeight: 1.55, borderTop: "1px solid var(--line-soft)", paddingTop: 16 }}>
           Note: this prototype stores everything in your browser workspace so you can try the full flow. A production SaaS would move accounts, staff logins, roles, and billing to a secure backend — the structure here mirrors how that would be organized.
         </div>
       </div>
+
+      {/* Save feedback toast */}
+      {toast && (
+        <div className={`ps-toast ${toast.type}`} role="status" aria-live="polite">
+          {toast.type === "ok" ? <Check size={15} /> : <AlertCircle size={15} />}
+          <span>{toast.msg}</span>
+        </div>
+      )}
     </>
   );
 }
 
 /* ---------- Workspace Settings sub-component (preserved from original) ---------- */
-function WorkspaceSettings({ workspace }) {
+function WorkspaceSettings({ workspace, notify }) {
   const { setWorkspace } = useAuth();
   const [wsName, setWsName] = useState(workspace?.name || "");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -299,8 +321,13 @@ function WorkspaceSettings({ workspace }) {
   }, [workspace?.name]);
 
   const saveName = async () => {
-    await updateWorkspace(wsName.trim());
-    setWorkspace({ ...workspace, name: wsName.trim() });
+    try {
+      await updateWorkspace(wsName.trim());
+      setWorkspace({ ...workspace, name: wsName.trim() });
+      notify?.("ok", "Workspace name saved");
+    } catch (e) {
+      notify?.("bad", e.message || "Failed to save workspace name");
+    }
   };
 
   const sendInvite = async () => {
@@ -309,9 +336,11 @@ function WorkspaceSettings({ workspace }) {
     try {
       const data = await inviteMember(inviteEmail.trim(), inviteRole);
       setInviteMsg(data.message || "Invite sent");
+      notify?.("ok", data.message || "Invite sent");
       setInviteEmail("");
     } catch (e) {
       setInviteErr(e.message || "Failed to send invite");
+      notify?.("bad", e.message || "Failed to send invite");
     } finally {
       setInviteBusy(false);
     }
@@ -323,9 +352,11 @@ function WorkspaceSettings({ workspace }) {
     try {
       await joinWorkspace(joinToken.trim());
       setJoinMsg("Joined workspace successfully! Refresh to see changes.");
+      notify?.("ok", "Joined workspace successfully!");
       setJoinToken("");
     } catch (e) {
       setJoinErr(e.message || "Invalid or expired token");
+      notify?.("bad", e.message || "Invalid or expired token");
     }
   };
 
@@ -407,7 +438,7 @@ function WorkspaceSettings({ workspace }) {
 }
 
 /* ---------- Integrations sub-component (preserved from original) ---------- */
-function IntegrationsSettings() {
+function IntegrationsSettings({ notify }) {
   const [keys, setKeys] = useState([]);
   const [webhooks, setWebhooks] = useState([]);
   const [newKeyName, setNewKeyName] = useState("");
@@ -438,14 +469,23 @@ function IntegrationsSettings() {
       const data = await createApiKey(newKeyName || "My API Key");
       setNewKeyValue(data.key);
       setNewKeyName("");
+      notify?.("ok", "API key created");
       loadData();
-    } catch (e) { console.error("Failed to create key:", e); }
+    } catch (e) {
+      console.error("Failed to create key:", e);
+      notify?.("bad", e.message || "Failed to create API key");
+    }
     finally { setLoading(false); }
   };
 
   const removeKey = async (id) => {
     if (!confirm("Revoke this API key? Any integrations using it will break.")) return;
-    await deleteApiKey(id);
+    try {
+      await deleteApiKey(id);
+      notify?.("ok", "API key revoked");
+    } catch (e) {
+      notify?.("bad", e.message || "Failed to revoke API key");
+    }
     loadData();
   };
 
@@ -455,19 +495,33 @@ function IntegrationsSettings() {
     try {
       await createWebhook({ url: whUrl.trim(), events: whEvents, secret: whSecret || undefined });
       setWhUrl(""); setWhEvents("script.completed,script.used"); setWhSecret("");
+      notify?.("ok", "Webhook added");
       loadData();
-    } catch (e) { console.error("Failed to create webhook:", e); }
+    } catch (e) {
+      console.error("Failed to create webhook:", e);
+      notify?.("bad", e.message || "Failed to add webhook");
+    }
     finally { setLoading(false); }
   };
 
   const toggleWebhook = async (wh) => {
-    await updateWebhook(wh.id, { active: !wh.active });
+    try {
+      await updateWebhook(wh.id, { active: !wh.active });
+      notify?.("ok", wh.active ? "Webhook paused" : "Webhook resumed");
+    } catch (e) {
+      notify?.("bad", e.message || "Failed to update webhook");
+    }
     loadData();
   };
 
   const removeWebhook = async (id) => {
     if (!confirm("Delete this webhook?")) return;
-    await deleteWebhook(id);
+    try {
+      await deleteWebhook(id);
+      notify?.("ok", "Webhook deleted");
+    } catch (e) {
+      notify?.("bad", e.message || "Failed to delete webhook");
+    }
     loadData();
   };
 
@@ -477,14 +531,23 @@ function IntegrationsSettings() {
     try {
       await createCrmConnection({ crm_type: crmType, webhook_url: crmUrl.trim(), api_token: crmToken || undefined });
       setCrmUrl(""); setCrmToken(""); setCrmType("zapier");
+      notify?.("ok", "CRM connected");
       loadData();
-    } catch (e) { console.error("Failed to connect CRM:", e); }
+    } catch (e) {
+      console.error("Failed to connect CRM:", e);
+      notify?.("bad", e.message || "Failed to connect CRM");
+    }
     finally { setLoading(false); }
   };
 
   const removeCrm = async (id) => {
     if (!confirm("Disconnect this CRM?")) return;
-    await deleteCrmConnection(id);
+    try {
+      await deleteCrmConnection(id);
+      notify?.("ok", "CRM disconnected");
+    } catch (e) {
+      notify?.("bad", e.message || "Failed to disconnect CRM");
+    }
     loadData();
   };
 

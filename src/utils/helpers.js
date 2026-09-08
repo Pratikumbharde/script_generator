@@ -174,8 +174,16 @@ export function closeOpenStructures(str) {
     else if (ch === "{" || ch === "[") stack.push(ch);
     else if (ch === "}" || ch === "]") stack.pop();
   }
-  if (inStr) return null;
-  let out = str.replace(/,\s*$/, "");
+  // Truncated mid-string (the common case when the model hits its token
+  // limit): strip an incomplete escape, close the quote and salvage the
+  // parseable prefix instead of giving up on the whole script.
+  let out = str;
+  if (inStr) {
+    out = out.replace(/\\u[0-9a-fA-F]{0,3}$/, ""); // cut inside a \uXXXX escape
+    if (esc) out = out.slice(0, -1);               // dangling backslash
+    out += '"';
+  }
+  out = out.replace(/,\s*$/, "");
   for (let i = stack.length - 1; i >= 0; i--) out += stack[i] === "{" ? "}" : "]";
   return out;
 }
@@ -216,6 +224,7 @@ export async function callModel(system, prompt) {
       ],
       stream: false,
       think: false,
+      jsonMode: true, // constrain the model to valid JSON — scripts are parsed as JSON
       options: { num_ctx: 16384, num_predict: 16384 },
     }),
   });
@@ -235,6 +244,7 @@ export async function callModelStream(system, prompt, onChunk) {
       ],
       stream: true,
       think: false,
+      jsonMode: true, // constrain the model to valid JSON — scripts are parsed as JSON
       options: { num_ctx: 16384, num_predict: 16384 },
     }),
   });
@@ -382,7 +392,7 @@ Give exactly 6 objections realistic for this buyer and region. Output ONLY the J
     try { objText = await callModel(SYS, objPrompt); } catch (_) { objText = ""; }
   }
 
-  const core = safeParseJSON(coreText);
+  const core = await parseCoreWithRetry(coreText, corePrompt, SYS);
   if (!core.segments || !Array.isArray(core.segments) || core.segments.length === 0) {
     throw new Error("The script came back incomplete. Please try generating again.");
   }
@@ -396,6 +406,17 @@ Give exactly 6 objections realistic for this buyer and region. Output ONLY the J
     segments: core.segments,
     objections,
   };
+}
+
+/* Parse the core script JSON; on failure (usually a token-limit truncation),
+   retry the generation once with a completion-forcing nudge. */
+async function parseCoreWithRetry(coreText, corePrompt, sys) {
+  try { return safeParseJSON(coreText); } catch (_) { /* fall through to retry */ }
+  const retryPrompt = `${corePrompt}
+
+Your previous reply was cut off before it finished. Output the COMPLETE JSON again — keep every string shorter than before, and make sure the JSON ends with }. No other text.`;
+  const retryText = await callModel(sys, retryPrompt);
+  return safeParseJSON(retryText);
 }
 
 export function productBlock(p) {
@@ -496,7 +517,7 @@ Give exactly 6 objections realistic for this buyer and region. Output ONLY the J
     callModel(SYS, objPrompt).catch(() => ""),
   ]);
 
-  const core = safeParseJSON(coreText);
+  const core = await parseCoreWithRetry(coreText, corePrompt, SYS);
   if (!core.segments || !Array.isArray(core.segments) || core.segments.length === 0) {
     throw new Error("The script came back incomplete. Please try generating again.");
   }

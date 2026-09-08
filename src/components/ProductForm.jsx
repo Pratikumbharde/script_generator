@@ -3,6 +3,7 @@ import LimitedInput from "./shared/LimitedInput.jsx";
 import LimitedTextarea from "./shared/LimitedTextarea.jsx";
 import VoiceRecorder from "./shared/VoiceRecorder.jsx";
 import { createProduct, updateProduct } from "../api/client.js";
+import { useBrand } from "../context/BrandContext.jsx";
 import {
   ChevronDown,
   ChevronRight,
@@ -93,6 +94,7 @@ const STATUS_COLOR = {
 };
 
 export default function ProductForm({ product, onCancel, onSaved }) {
+  const { branding } = useBrand();
   const isEdit = !!(product && product.id);
   const initial = product
     ? {
@@ -341,7 +343,7 @@ export default function ProductForm({ product, onCancel, onSaved }) {
             Products
           </div>
           <div className="ps-title">{isEdit ? "Edit product" : "Add product"}</div>
-          <div className="ps-sub">Build your product profile so Pitch Studio can generate sharper, more relevant sales conversations.</div>
+          <div className="ps-sub">Build your product profile so {branding.site_name} can generate sharper, more relevant sales conversations.</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <div className={`pf-draft-badge ${savedAt ? "saved" : ""}`}>

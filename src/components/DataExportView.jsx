@@ -45,7 +45,7 @@ export default function DataExportView() {
   return (
     <div className="ps-container">
       <div className="ps-header">
-        <h1>📦 Data Export & Backup</h1>
+        <h1>Export</h1>
         <p className="ps-muted">Export your workspace data for backups, compliance, or migration.</p>
       </div>
 

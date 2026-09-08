@@ -188,7 +188,7 @@ function VersionRow({ refItem, isCurrent, onOpen, onDelete }) {
   const type = refItem.version_number === 1 ? "Original" : "AI refined";
   return (
     <div className="ds-version-row">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+      <div className="sr-version-meta">
         <span style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, fontSize: 13, color: "var(--ink)", minWidth: 36 }}>v{refItem.version_number}</span>
         {score != null && (
           <span style={{ fontWeight: 700, fontSize: 13, color: scoreColor(score) }}>{score}/100</span>
@@ -199,9 +199,9 @@ function VersionRow({ refItem, isCurrent, onOpen, onDelete }) {
           </span>
         )}
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{type}</span>
-        <span style={{ fontSize: 12, color: "var(--faint)", marginLeft: "auto" }}>{fmtDate(refItem.created_at)}</span>
+        <span className="sr-version-date">{fmtDate(refItem.created_at)}</span>
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
+      <div className="sr-version-row-actions" style={{ display: "flex", gap: 6 }}>
         <button className="ds-btn-ter sm" onClick={() => onOpen(refItem)}><ChevronRight size={14} /> Open</button>
         {!isCurrent && (
           <button className="ds-btn-ico" onClick={() => onDelete(refItem.id)} title="Delete version"><Trash2 size={14} /></button>
@@ -384,7 +384,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
       <div className="ps-top">
         <div style={{ flex: 1 }}>
           <div className="ps-eyebrow">Optimize</div>
-          <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />AI Script Refinement</div>
+          <div className="ps-title"><PenTool size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Script Refinement</div>
         </div>
         {phase !== "select" && (
           <button className="ds-btn-sec" onClick={() => { setPhase("select"); setSelectedScript(null); }}>
@@ -425,7 +425,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
                 </div>
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+              <div className="sr-script-grid">
                 {filteredScripts.map((s) => (
                   <ScriptCard
                     key={s.id}
@@ -444,7 +444,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
                 <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 600, fontSize: 14, marginBottom: 12, color: "var(--ink)" }}>Recent refinements</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {refinements.slice(0, 3).map((r) => (
-                    <button key={r.id} className="ds-version-row" onClick={() => {
+                    <button key={r.id} className="ds-version-row sr-recent-row" onClick={() => {
                       const sc = scripts.find((s) => String(s.id) === String(r.script_id));
                       if (sc) { setSelectedScript(sc); setPhase("baseline"); }
                     }}>
@@ -468,18 +468,18 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
             </div>
             <div className="pd-sub" style={{ marginBottom: 20 }}>Select refinement goal and focus areas, then generate AI improvements.</div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1fr) minmax(280px, 1fr)", gap: 16, alignItems: "start" }}>
+            <div className="sr-grid-2">
               {/* Left: Performance + History */}
               <div className="ds-template-b">
                 {/* Score card */}
                 <div className="pd-card">
                   <div className="pd-card-h">Script Performance</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+                  <div className="sr-score-flex">
                     <ScoreRing
                       value={latestRefinement?.improvement_score || 0}
                       previous={latestRefinement?.previous_score}
                     />
-                    <div style={{ flex: 1, minWidth: 200 }}>
+                    <div className="sr-dims">
                       <DimensionBars scores={dimScores} />
                     </div>
                   </div>
@@ -523,7 +523,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
               </div>
 
               {/* Right: Refinement Controls */}
-              <div className="pd-card" style={{ position: "sticky", top: 16 }}>
+              <div className="pd-card sr-controls">
                 <div className="pd-card-h">Refinement Controls</div>
 
                 <div style={{ marginBottom: 16 }}>
@@ -606,7 +606,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
             </div>
 
             {/* Script panels */}
-            <div style={{ display: "grid", gridTemplateColumns: workspaceTab === "compare" ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 24 }}>
+            <div className="sr-compare" data-tab={workspaceTab}>
               {(workspaceTab === "original" || workspaceTab === "compare") && (
                 <div className="ds-refine-panel">
                   <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10 }}>Original Script</div>
@@ -644,7 +644,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
             </div>
 
             {/* Action bar */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", padding: "14px 0", borderTop: "1px solid var(--line-soft)" }}>
+            <div className="sr-action-bar">
               <button className="ds-btn-pri" onClick={() => console.warn("Save as new version: not yet implemented")}>
                 <Save size={14} /> Save as new version
               </button>
@@ -662,7 +662,7 @@ export default function ScriptRefinementView({ products = [], onOpenStudio }) {
               <button className="ds-btn-ter" onClick={() => setPhase("history")}>
                 <Clock size={14} /> Version history
               </button>
-              <div style={{ marginLeft: "auto" }}>
+              <div className="sr-spacer">
                 <button className="ds-btn-ico" onClick={() => setConfirmDel(latestRefinement.id)} title="Delete version">
                   <Trash2 size={14} />
                 </button>

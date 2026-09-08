@@ -25,6 +25,14 @@ export default function ComponentLibrary() {
 
   useEffect(() => { load(); }, []);
 
+  // While the create form is open, switching the filter pill above also
+  // switches the form's Type — they stay in sync until the user closes it.
+  useEffect(() => {
+    if (creating && filter !== "all") {
+      setForm((prev) => (prev.type === filter ? prev : { ...prev, type: filter }));
+    }
+  }, [filter, creating]);
+
   const load = async () => {
     try {
       const rows = await listComponents();
@@ -65,7 +73,9 @@ export default function ComponentLibrary() {
   };
 
   const openCreate = () => {
-    setForm({ name: "", type: "opening", content: "", tags: "" });
+    // Preselect the type from the active filter pill, so a component added
+    // while "Objection" is filtered lands in Objection — not Opening.
+    setForm({ name: "", type: filter !== "all" ? filter : "opening", content: "", tags: "" });
     setErrors({});
     setCreating(true);
   };
@@ -149,7 +159,13 @@ export default function ComponentLibrary() {
                   onKeyDown={handleKeyDown("name")}
                   style={errors.name ? { borderColor: "#B23237" } : undefined}
                 />
-                {errors.name && <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.name}</div>}
+                {errors.name ? (
+                  <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.name}</div>
+                ) : form.name.trim().length > 0 && form.name.trim().length < 3 ? (
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                    Minimum 3 characters required — {3 - form.name.trim().length} more to go
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label className="flab">Type<span className="req">*</span></label>
@@ -168,7 +184,17 @@ export default function ComponentLibrary() {
                 onChange={(e) => handleFieldChange("content", e.target.value)}
                 style={errors.content ? { borderColor: "#B23237" } : undefined}
               />
-              {errors.content && <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.content}</div>}
+              {errors.content ? (
+                <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>{errors.content}</div>
+              ) : form.content.trim() && !/[a-zA-Z]/.test(form.content) ? (
+                <div style={{ fontSize: 12, color: "#B23237", marginTop: 4 }}>
+                  Content must contain actual words, not just numbers
+                </div>
+              ) : form.content.trim().length < 10 ? (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                  Minimum 10 characters required — {10 - form.content.trim().length} more to go
+                </div>
+              ) : null}
             </div>
             <div className="frow">
               <label className="flab">Tags <span className="opt">(comma-separated, optional)</span></label>

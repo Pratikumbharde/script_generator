@@ -309,7 +309,7 @@ export default function Sidebar({ view, setView, active, company, workspace, use
             <button
               className="es-footer-btn"
               onClick={() => window.dispatchEvent(new CustomEvent("ps:start-tour"))}
-              title="Take a tour of Pitch Studio"
+              title={`Take a tour of ${branding.site_name}`}
             >
               <HelpCircle size={16} />
               {!collapsed && <span>Help</span>}

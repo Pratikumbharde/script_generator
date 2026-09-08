@@ -66,7 +66,7 @@ export default function PermissionsView() {
   return (
     <div className="ps-container">
       <div className="ps-header">
-        <h1>🔐 Workspace Permissions</h1>
+        <h1>Permissions</h1>
         <p className="ps-muted">Control who can do what in your workspace.</p>
       </div>
 

@@ -294,12 +294,12 @@ export default function VoiceDNA() {
                   })}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              {/* <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button className="ps-btn ghost" onClick={() => setUploadingRecording(true)}>
                   <Upload size={16} /> Upload Recording
                 </button>
                 <button className="ps-btn ghost" onClick={() => setCreating(true)}>+ Add Document</button>
-              </div>
+              </div> */}
             </>
           )}
         </div>
