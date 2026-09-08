@@ -415,8 +415,9 @@ export async function updateBranding(data) {
   return fetchJson('/branding', { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.branding)
 }
 
-/* Upload a logo/favicon image — saved on the server under uploads/branding/.
-   Returns the served URL to store in the branding fields. Uses FormData, so
+/* Upload a logo/favicon image — the server returns a base64 data URI that is
+   stored in the database (site_settings), so branding survives redeploys on
+   hosts with an ephemeral filesystem (e.g. Render). Uses FormData, so
    no Content-Type header (the browser sets the multipart boundary). */
 export async function uploadBrandingImage(file, kind = 'logo') {
   const fd = new FormData()

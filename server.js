@@ -141,7 +141,7 @@ app.use(express.static(DIST_PATH, {
 }))
 
 /* ---------- SQLite database ---------- */
-const db = new Database(path.join(__dirname, 'database.sqlite'))
+const db = new Database(process.env.DB_PATH || path.join(__dirname, 'database.sqlite'))
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -1004,11 +1004,11 @@ db.prepare(`
 
 /* ---------- Branding: global site settings (singleton row id=1) ----------
    Powers the public landing page, meta tags, favicon and logo everywhere.
-   Uploaded logo/favicon files live on disk under uploads/branding/ and are
-   served at /api/branding/uploads/<file> (mounting them under /api keeps
-   them reachable through the Vite dev proxy and express.static in prod).
-   The logo_data / favicon_data columns hold either that URL (uploads) or
-   a legacy data URI (older saves) — consumers render both. */
+   Logo/favicon images are stored directly in these columns as base64 data
+   URIs — they live in the database, so they survive redeploys on hosts with
+   an ephemeral filesystem (Render, Heroku, Docker without volumes). Very old
+   rows may still hold a /api/branding/uploads/<file> disk URL — consumers
+   render both, and that path is still served for such legacy rows. */
 db.exec(`
   CREATE TABLE IF NOT EXISTS site_settings (
     id INTEGER PRIMARY KEY CHECK(id = 1),
@@ -1028,7 +1028,6 @@ const BRAND_PUBLIC_FIELDS = ['site_name', 'site_tagline', 'logo_data', 'favicon_
 const BRAND_MAX_IMAGE_BYTES = 1.5 * 1024 * 1024 // data URI strings (legacy saves)
 const BRAND_UPLOAD_DIR = path.join(__dirname, 'uploads', 'branding')
 const BRAND_UPLOAD_URL_PREFIX = '/api/branding/uploads/'
-const BRAND_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
 
 function getSiteSettings() {
   const row = db.prepare('SELECT * FROM site_settings WHERE id = 1').get()
@@ -2257,8 +2256,9 @@ app.get('/api/branding', (req, res) => {
   res.json({ branding: out })
 })
 
-/* Uploaded logo / favicon files — served under /api so the Vite dev proxy
-   (and express.static in production) reaches them with no extra config. */
+/* Uploaded logo / favicon images are stored in the database as base64 data
+   URIs (see /api/branding/upload below) so they survive ephemeral hosts like
+   Render. The static mount below only serves files saved before that change. */
 fs.mkdirSync(BRAND_UPLOAD_DIR, { recursive: true })
 app.use(BRAND_UPLOAD_URL_PREFIX, express.static(BRAND_UPLOAD_DIR, {
   setHeaders: (res, filePath) => {
@@ -2268,25 +2268,24 @@ app.use(BRAND_UPLOAD_URL_PREFIX, express.static(BRAND_UPLOAD_DIR, {
   }
 }))
 
+/* Image types accepted for branding — must match the data-URI validation in
+   PUT /api/branding so an upload can never be rejected at save time. */
+const BRAND_IMAGE_TYPES = /^image\/(png|jpe?g|webp|svg\+xml|gif|ico)$/
 const brandImageUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, BRAND_UPLOAD_DIR),
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').toLowerCase().slice(0, 8) || '.png'
-      const kind = req.query.kind === 'favicon' ? 'favicon' : 'logo'
-      cb(null, `${kind}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`)
-    },
-  }),
-  limits: { fileSize: BRAND_UPLOAD_MAX_BYTES },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BRAND_MAX_IMAGE_BYTES },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true)
-    cb(new Error('Only image files are allowed'))
+    if (file.mimetype && BRAND_IMAGE_TYPES.test(file.mimetype)) return cb(null, true)
+    cb(new Error('Only image files (png, jpg, webp, svg, gif, ico) are allowed'))
   },
 })
 
 app.post('/api/branding/upload', requireAuth, requireRole('admin', 'manager'), brandImageUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No image file received' })
-  res.json({ url: `${BRAND_UPLOAD_URL_PREFIX}${req.file.filename}` })
+  // Return a data URI instead of a disk URL: the value is saved into
+  // site_settings.logo_data / favicon_data and travels with the database,
+  // so it survives redeploys on hosts with an ephemeral filesystem.
+  res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` })
 })
 
 app.put('/api/branding', requireAuth, requireRole('admin', 'manager'), (req, res) => {
@@ -2305,8 +2304,8 @@ app.put('/api/branding', requireAuth, requireRole('admin', 'manager'), (req, res
     if (body[field] === undefined) return
     const next = body[field] ? String(body[field]) : null
     if (next) {
-      // Accept an upload URL (file saved on disk via /api/branding/upload)
-      // or a legacy data URI — both render the same on the client.
+      // Accept a base64 image data URI (what /api/branding/upload returns)
+      // or a legacy disk upload URL from older saves — both render the same.
       const isDataUri = /^data:image\/(png|jpe?g|webp|svg\+xml|gif|ico);base64,[A-Za-z0-9+/=]+$/.test(next)
       const isUploadUrl = next.startsWith(BRAND_UPLOAD_URL_PREFIX) && /^[A-Za-z0-9._-]+$/.test(path.basename(next))
       if (!isDataUri && !isUploadUrl) {
@@ -2314,7 +2313,7 @@ app.put('/api/branding', requireAuth, requireRole('admin', 'manager'), (req, res
         return
       }
       if (isDataUri && next.length > BRAND_MAX_IMAGE_BYTES) {
-        badField = `${field} is too large (max ${Math.round(BRAND_MAX_IMAGE_BYTES / 1024)} KB) — upload it as a file instead`
+        badField = `${field} is too large (max ${Math.round(BRAND_MAX_IMAGE_BYTES / 1024)} KB) — use a smaller image`
         return
       }
     }
