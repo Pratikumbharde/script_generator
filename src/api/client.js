@@ -401,6 +401,36 @@ export async function updatePreferences(data) {
   return fetchJson('/preferences', { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.preferences)
 }
 
+/* ---------- Branding: global site settings ----------
+   GET is public (the landing/login screens render before auth), PUT is
+   admin/manager only. No retry — branding is non-critical and must not
+   stall first paint. */
+export async function getBranding() {
+  const res = await fetch(`${API_BASE}/branding`)
+  if (!res.ok) throw new Error(`Request failed (${res.status})`)
+  return res.json().then((r) => r.branding)
+}
+
+export async function updateBranding(data) {
+  return fetchJson('/branding', { method: 'PUT', body: JSON.stringify(data) }).then((r) => r.branding)
+}
+
+/* Upload a logo/favicon image — saved on the server under uploads/branding/.
+   Returns the served URL to store in the branding fields. Uses FormData, so
+   no Content-Type header (the browser sets the multipart boundary). */
+export async function uploadBrandingImage(file, kind = 'logo') {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await fetch(`${API_BASE}/branding/upload?kind=${encodeURIComponent(kind)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: fd,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`)
+  return data.url
+}
+
 /* ---------- P6.2: automation rules ---------- */
 export async function listAutomationRules() {
   return fetchJson('/automation-rules').then((r) => r.rules)

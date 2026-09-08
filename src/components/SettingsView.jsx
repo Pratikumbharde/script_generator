@@ -16,7 +16,11 @@ import {
   testSmtp,
   fetchAiModels,
   testDeepgram,
+  updateBranding,
+  uploadBrandingImage,
 } from "../api/client.js";
+import { useBrand } from "../context/BrandContext.jsx";
+import { DEFAULT_LANDING } from "../data/brandingDefaults.js";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
 import {
@@ -36,6 +40,10 @@ import {
   Lock,
   Settings,
   AudioLines,
+  Palette,
+  LayoutTemplate,
+  Image as ImageIcon,
+  Globe,
 } from "lucide-react";
 
 const PROVIDERS = [
@@ -51,6 +59,43 @@ const PROVIDER_COLORS = {
   anthropic: { bg: "#F7F8FC", border: "#D9DEEE", text: "#2B4CF0" },
   deepseek: { bg: "#F0F4FF", border: "#C7D5FB", text: "#3B5BDB" },
 };
+
+/* Small labeled input/textarea row used by the Branding + Landing Page tabs */
+function LField({ label, value, onChange, max = 200, placeholder = "", textarea = false, rows = 3, hint }) {
+  return (
+    <div>
+      <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>{label}</label>
+      {textarea ? (
+        <LimitedTextarea className="ftext" maxLength={max} rows={rows} value={value} onChange={onChange} placeholder={placeholder} />
+      ) : (
+        <LimitedInput className="finp" maxLength={max} type="text" value={value} onChange={onChange} placeholder={placeholder} />
+      )}
+      {hint && <div className="fhint" style={{ marginTop: 5 }}>{hint}</div>}
+    </div>
+  );
+}
+
+/* Image picker (logo / favicon) with live preview + remove */
+function ImageField({ label, value, onPick, onRemove, hint, preview = 44 }) {
+  return (
+    <div>
+      <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ width: preview, height: preview, borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+          {value
+            ? <img src={value} alt={label} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            : <ImageIcon size={18} style={{ color: "var(--faint)" }} />}
+        </div>
+        <label className="ps-btn ghost sm" style={{ cursor: "pointer", margin: 0 }}>
+          <ImageIcon size={13} /> {value ? "Replace" : "Upload"}
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/x-icon" style={{ display: "none" }} onChange={(e) => { onPick(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
+        {value && <button className="ps-btn-ghost danger" onClick={onRemove} title="Remove image"><Trash2 size={13} /></button>}
+      </div>
+      {hint && <div className="fhint" style={{ marginTop: 6 }}>{hint}</div>}
+    </div>
+  );
+}
 
 export default function SettingsView() {
   const [prefs, setPrefs] = useState(null);
@@ -82,6 +127,8 @@ export default function SettingsView() {
 
   const SETTINGS_TABS = [
     { id: "general", label: "General", icon: Settings },
+    { id: "branding", label: "Branding", icon: Palette },
+    { id: "landing", label: "Landing Page", icon: LayoutTemplate },
     { id: "email", label: "Email", icon: Mail },
     { id: "ai", label: "AI Models", icon: Cpu },
   ];
@@ -128,6 +175,103 @@ export default function SettingsView() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /* ── Branding (site name, logo, favicon, meta tags) & Landing page copy ──
+     Edits are local until "Save" — the live brand context is refreshed on
+     save so the sidebar / landing / login update immediately. */
+  const { branding: liveBranding, landing: liveLanding, refresh: refreshBrand } = useBrand();
+  const [brandForm, setBrandForm] = useState(null);
+  const [landingForm, setLandingForm] = useState(null);
+  const [brandStatus, setBrandStatus] = useState(null);
+  const [landingStatus, setLandingStatus] = useState(null);
+
+  useEffect(() => {
+    if (liveBranding && !brandForm) {
+      setBrandForm({
+        site_name: liveBranding.site_name || "",
+        site_tagline: liveBranding.site_tagline || "",
+        meta_description: liveBranding.meta_description || "",
+        meta_keywords: liveBranding.meta_keywords || "",
+        logo_data: liveBranding.logo_data || null,
+        favicon_data: liveBranding.favicon_data || null,
+      });
+    }
+  }, [liveBranding]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (liveLanding && !landingForm) {
+      setLandingForm(JSON.parse(JSON.stringify(liveLanding)));
+    }
+  }, [liveLanding]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickBrandImage = async (file, field) => {
+    if (!file) return;
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("Please choose an image file (PNG, JPG, WebP, SVG).");
+      if (file.size > 5 * 1024 * 1024) throw new Error("Image is too large — keep it under 5 MB.");
+      setBrandStatus({ ok: true, msg: `Uploading ${field === "logo_data" ? "logo" : "favicon"}…` });
+      const kind = field === "logo_data" ? "logo" : "favicon";
+      const url = await uploadBrandingImage(file, kind);
+      setBrandForm((f) => ({ ...f, [field]: url }));
+      setBrandStatus({ ok: true, msg: "Image uploaded — press Save Branding to apply." });
+    } catch (e) {
+      setBrandStatus({ ok: false, msg: e.message || "Upload failed." });
+    }
+  };
+
+  const saveBranding = async () => {
+    if (!brandForm) return;
+    if (!String(brandForm.site_name || "").trim()) {
+      setBrandStatus({ ok: false, msg: "Site name is required — it appears everywhere in the app." });
+      return;
+    }
+    setSaving(true);
+    try {
+      const b = await updateBranding({
+        site_name: brandForm.site_name,
+        site_tagline: brandForm.site_tagline || null,
+        meta_description: brandForm.meta_description || null,
+        meta_keywords: brandForm.meta_keywords || null,
+        logo_data: brandForm.logo_data || null,
+        favicon_data: brandForm.favicon_data || null,
+      });
+      refreshBrand(b);
+      setBrandForm((f) => ({ ...f, logo_data: b.logo_data || null, favicon_data: b.favicon_data || null }));
+      setBrandStatus({ ok: true, msg: "Branding saved — applied across the app." });
+    } catch (e) {
+      setBrandStatus({ ok: false, msg: e.message || "Could not save branding." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveLanding = async () => {
+    if (!landingForm) return;
+    setSaving(true);
+    try {
+      const b = await updateBranding({ landing: landingForm });
+      refreshBrand(b);
+      setLandingStatus({ ok: true, msg: "Landing page content saved." });
+    } catch (e) {
+      setLandingStatus({ ok: false, msg: e.message || "Could not save landing content." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* Immutable update for the nested landing draft */
+  const updLanding = (mutate) => {
+    setLandingForm((f) => {
+      const c = JSON.parse(JSON.stringify(f));
+      mutate(c);
+      return c;
+    });
+  };
+  const resetLanding = () => {
+    if (!confirm("Reset all landing page content to the default copy?")) return;
+    updLanding((c) => { Object.assign(c, JSON.parse(JSON.stringify(DEFAULT_LANDING))); });
+    setLandingStatus(null);
   };
 
   /* ── AI Account CRUD ── */
@@ -305,7 +449,7 @@ export default function SettingsView() {
       <div className="ps-top">
         <div>
           <div className="ps-title"><Settings size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Settings</div>
-          <div className="ps-sub">Manage your appearance, notifications, email (SMTP + templates), and AI model accounts.</div>
+          <div className="ps-sub">Manage your branding, landing page content, appearance, notifications, email (SMTP + templates), and AI model accounts.</div>
         </div>
       </div>
       <div className="ps-body">
@@ -336,12 +480,15 @@ export default function SettingsView() {
             {[
               { id: "light", label: "☀️ Light" },
               { id: "dark", label: "🌙 Dark" },
-              { id: "system", label: "💻 System" },
-            ].map((t) => (
-              <button key={t.id} className={`ps-btn ${prefs.theme === t.id ? "pri" : "ghost"}`} onClick={() => savePrefs({ theme: t.id })} disabled={saving}>
-                {t.label}
-              </button>
-            ))}
+            ].map((t) => {
+              // Normalize the legacy "system" value so the active state stays visible
+              const activeTheme = prefs.theme === "system" ? "light" : prefs.theme;
+              return (
+                <button key={t.id} className={`ps-btn ${activeTheme === t.id ? "pri" : "ghost"}`} onClick={() => savePrefs({ theme: t.id })} disabled={saving}>
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -366,6 +513,223 @@ export default function SettingsView() {
         </div>
 
         </>
+        )}
+
+        {activeTab === "branding" && (
+          !brandForm ? (
+            <div className="ai-section" style={{ marginBottom: 18 }}><div className="loading-box"><div className="ring" /><div className="msg">Loading branding…</div></div></div>
+          ) : (
+          <>
+          {/* Site identity */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h"><Globe size={16} style={{ verticalAlign: "-3px", marginRight: 6 }} />Site Identity</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.55 }}>
+              These values apply <b>everywhere</b> — browser tab title, sidebar, login/register screens, landing page and the PWA (app name + icon).
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+              <LField
+                label="Site Name"
+                value={brandForm.site_name}
+                onChange={(e) => { setBrandForm((f) => ({ ...f, site_name: e.target.value })); setBrandStatus(null); }}
+                max={80}
+                placeholder="Pitch Studio"
+                hint="Shown in the sidebar, login page, landing page and browser tab."
+              />
+              <LField
+                label="Tagline (optional)"
+                value={brandForm.site_tagline}
+                onChange={(e) => { setBrandForm((f) => ({ ...f, site_tagline: e.target.value })); setBrandStatus(null); }}
+                max={200}
+                placeholder="The live-call cockpit for sales teams"
+              />
+            </div>
+          </div>
+
+          {/* Logo & favicon */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h"><ImageIcon size={16} style={{ verticalAlign: "-3px", marginRight: 6 }} />Logo & Favicon</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
+              <ImageField
+                label="Logo"
+                value={brandForm.logo_data}
+                onPick={(file) => pickBrandImage(file, "logo_data")}
+                onRemove={() => { setBrandForm((f) => ({ ...f, logo_data: null })); setBrandStatus(null); }}
+                hint="Shown in the sidebar, login page and landing nav/footer. PNG/SVG with transparent background works best. Max 5 MB — leave empty to keep the default accent dot."
+              />
+              <ImageField
+                label="Favicon"
+                value={brandForm.favicon_data}
+                onPick={(file) => pickBrandImage(file, "favicon_data")}
+                onRemove={() => { setBrandForm((f) => ({ ...f, favicon_data: null })); setBrandStatus(null); }}
+                hint="Browser tab icon and PWA/app icon. Square PNG 192×192 or 512×512 recommended. Max 5 MB."
+              />
+            </div>
+          </div>
+
+          {/* Meta tags */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h"><Globe size={16} style={{ verticalAlign: "-3px", marginRight: 6 }} />Meta Tags (SEO)</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField
+                label="Meta Description"
+                value={brandForm.meta_description}
+                onChange={(e) => { setBrandForm((f) => ({ ...f, meta_description: e.target.value })); setBrandStatus(null); }}
+                max={300}
+                textarea
+                rows={2}
+                placeholder="AI sales script generator for high-performing teams"
+                hint={'Used for the meta description tag — what search engines show under your link.'}
+              />
+              <LField
+                label="Meta Keywords (optional, comma-separated)"
+                value={brandForm.meta_keywords}
+                onChange={(e) => { setBrandForm((f) => ({ ...f, meta_keywords: e.target.value })); setBrandStatus(null); }}
+                max={300}
+                placeholder="sales scripts, sales enablement, AI sales coach"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button className="ps-btn pri" onClick={saveBranding} disabled={saving}>
+              {saving ? "Saving…" : "Save Branding"}
+            </button>
+            {brandStatus && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: brandStatus.ok ? "#1A7F5B" : "#B23237", background: brandStatus.ok ? "#EDF9F2" : "#FDF2F2", border: `1px solid ${brandStatus.ok ? "#C8E9D8" : "#F0C9CA"}`, borderRadius: 10, padding: "8px 14px" }}>
+                {brandStatus.ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                {brandStatus.msg}
+              </div>
+            )}
+          </div>
+          </>
+          )
+        )}
+
+        {activeTab === "landing" && (
+          !landingForm ? (
+            <div className="ai-section" style={{ marginBottom: 18 }}><div className="loading-box"><div className="ring" /><div className="msg">Loading landing content…</div></div></div>
+          ) : (
+          <>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.55 }}>
+            Edit the public landing page copy. Leave a field empty to fall back to the default text.
+            In the hero title, wrap words in <code style={{ background: "#F2F5FA", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>**double asterisks**</code> to render them with the accent highlight.
+          </div>
+
+          {/* Hero */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">🚀 Hero Section</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField label="Eyebrow (badge above the title)" value={landingForm.eyebrow} onChange={(e) => updLanding((c) => { c.eyebrow = e.target.value; })} max={120} placeholder="AI-powered sales enablement" />
+              <LField label="Hero Title" value={landingForm.hero_title} onChange={(e) => updLanding((c) => { c.hero_title = e.target.value; })} max={300} textarea rows={2} placeholder='Walk into every sales call with the **perfect script** — already in your pocket.' hint="Use **…** around words to give them the accent-gradient highlight." />
+              <LField label="Hero Subtitle" value={landingForm.hero_subtitle} onChange={(e) => updLanding((c) => { c.hero_subtitle = e.target.value; })} max={600} textarea rows={3} />
+              <LField label="Note under CTAs" value={landingForm.hero_note} onChange={(e) => updLanding((c) => { c.hero_note = e.target.value; })} max={200} placeholder="Free to start · No credit card" />
+            </div>
+          </div>
+
+          {/* Flow strip */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">➡️ Flow Strip (3 steps under the hero)</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              {landingForm.flow.map((step, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(260px, 2fr)", gap: 10, alignItems: "start" }}>
+                  <LField label={`Step ${i + 1} · Title`} value={step.title} onChange={(e) => updLanding((c) => { c.flow[i].title = e.target.value; })} max={120} />
+                  <LField label="Description" value={step.body} onChange={(e) => updLanding((c) => { c.flow[i].body = e.target.value; })} max={300} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* What is it */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">💡 "What is it" Section</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField label="Kicker" value={landingForm.what.kicker} onChange={(e) => updLanding((c) => { c.what.kicker = e.target.value; })} max={120} />
+              <LField label="Heading" value={landingForm.what.title} onChange={(e) => updLanding((c) => { c.what.title = e.target.value; })} max={200} />
+              <LField label="Body" value={landingForm.what.body} onChange={(e) => updLanding((c) => { c.what.body = e.target.value; })} max={800} textarea rows={3} />
+              <div>
+                <label className="ds-label" style={{ display: "block", marginBottom: 6 }}>Checklist (one line per item)</label>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {landingForm.what.checklist.map((item, i) => (
+                    <LimitedInput key={i} className="finp" maxLength={200} type="text" value={item} onChange={(e) => updLanding((c) => { c.what.checklist[i] = e.target.value; })} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* How it works */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">🧭 "How it works" Section</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField label="Kicker" value={landingForm.how.kicker} onChange={(e) => updLanding((c) => { c.how.kicker = e.target.value; })} max={120} />
+              <LField label="Heading" value={landingForm.how.title} onChange={(e) => updLanding((c) => { c.how.title = e.target.value; })} max={200} />
+              <LField label="Lead" value={landingForm.how.lead} onChange={(e) => updLanding((c) => { c.how.lead = e.target.value; })} max={400} />
+              {landingForm.how.steps.map((step, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(260px, 2fr)", gap: 10, alignItems: "start", padding: "10px 12px", border: "1px solid var(--line-soft)", borderRadius: 10 }}>
+                  <LField label={`Step ${i + 1} · Title`} value={step.title} onChange={(e) => updLanding((c) => { c.how.steps[i].title = e.target.value; })} max={120} />
+                  <LField label="Description" value={step.body} onChange={(e) => updLanding((c) => { c.how.steps[i].body = e.target.value; })} max={600} textarea rows={3} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">⚡ Features Grid</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+                <LField label="Kicker" value={landingForm.features.kicker} onChange={(e) => updLanding((c) => { c.features.kicker = e.target.value; })} max={120} />
+                <LField label="Heading" value={landingForm.features.title} onChange={(e) => updLanding((c) => { c.features.title = e.target.value; })} max={200} />
+              </div>
+              {landingForm.features.items.map((item, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(260px, 2fr)", gap: 10, alignItems: "start", padding: "10px 12px", border: "1px solid var(--line-soft)", borderRadius: 10 }}>
+                  <LField label={`Feature ${i + 1} · Title`} value={item.title} onChange={(e) => updLanding((c) => { c.features.items[i].title = e.target.value; })} max={120} />
+                  <LField label="Description" value={item.body} onChange={(e) => updLanding((c) => { c.features.items[i].body = e.target.value; })} max={400} textarea rows={2} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Who it's for */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">👥 "Who it's for" Section</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField label="Kicker" value={landingForm.who.kicker} onChange={(e) => updLanding((c) => { c.who.kicker = e.target.value; })} max={120} />
+              <LField label="Heading" value={landingForm.who.title} onChange={(e) => updLanding((c) => { c.who.title = e.target.value; })} max={200} />
+              <LField label="Lead" value={landingForm.who.lead} onChange={(e) => updLanding((c) => { c.who.lead = e.target.value; })} max={800} textarea rows={3} />
+              {landingForm.who.cards.map((card, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(260px, 2fr)", gap: 10, alignItems: "start", padding: "10px 12px", border: "1px solid var(--line-soft)", borderRadius: 10 }}>
+                  <LField label={`Card ${i + 1} · Title`} value={card.title} onChange={(e) => updLanding((c) => { c.who.cards[i].title = e.target.value; })} max={120} />
+                  <LField label="Description" value={card.body} onChange={(e) => updLanding((c) => { c.who.cards[i].body = e.target.value; })} max={400} textarea rows={2} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Final CTA + footer */}
+          <div className="ai-section" style={{ marginBottom: 18 }}>
+            <div className="ai-section-h">🎯 Final CTA & Footer</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              <LField label="CTA Heading" value={landingForm.cta.title} onChange={(e) => updLanding((c) => { c.cta.title = e.target.value; })} max={200} />
+              <LField label="CTA Body" value={landingForm.cta.body} onChange={(e) => updLanding((c) => { c.cta.body = e.target.value; })} max={400} />
+              <LField label="Footer Tagline" value={landingForm.footer_tagline} onChange={(e) => updLanding((c) => { c.footer_tagline = e.target.value; })} max={200} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button className="ps-btn pri" onClick={saveLanding} disabled={saving}>
+              {saving ? "Saving…" : "Save Landing Content"}
+            </button>
+            <button className="ps-btn ghost" onClick={resetLanding} disabled={saving}>Reset to defaults</button>
+            {landingStatus && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: landingStatus.ok ? "#1A7F5B" : "#B23237", background: landingStatus.ok ? "#EDF9F2" : "#FDF2F2", border: `1px solid ${landingStatus.ok ? "#C8E9D8" : "#F0C9CA"}`, borderRadius: 10, padding: "8px 14px" }}>
+                {landingStatus.ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                {landingStatus.msg}
+              </div>
+            )}
+          </div>
+          </>
+          )
         )}
 
         {activeTab === "email" && (

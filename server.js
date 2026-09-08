@@ -9,6 +9,7 @@ import path from 'path'
 import nodemailer from 'nodemailer'
 import multer from 'multer'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 
 dotenv.config()
 
@@ -112,7 +113,7 @@ app.use(cors({
     }
   }
 }))
-app.use(express.json())
+app.use(express.json({ limit: '1mb' })) // landing_json + branding fields; images upload as files, not JSON
 
 /* ---------- Serve frontend in production ---------- */
 const DIST_PATH = path.join(__dirname, 'dist')
@@ -997,6 +998,55 @@ db.prepare(`
     SELECT 1 FROM workspace_members m WHERE m.workspace_id = w.id AND m.user_id = w.owner_user_id
   )
 `).run()
+
+/* ---------- Branding: global site settings (singleton row id=1) ----------
+   Powers the public landing page, meta tags, favicon and logo everywhere.
+   Uploaded logo/favicon files live on disk under uploads/branding/ and are
+   served at /api/branding/uploads/<file> (mounting them under /api keeps
+   them reachable through the Vite dev proxy and express.static in prod).
+   The logo_data / favicon_data columns hold either that URL (uploads) or
+   a legacy data URI (older saves) — consumers render both. */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS site_settings (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    site_name TEXT,
+    site_tagline TEXT,
+    logo_data TEXT,
+    favicon_data TEXT,
+    meta_description TEXT,
+    meta_keywords TEXT,
+    landing_json TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`)
+db.prepare('INSERT OR IGNORE INTO site_settings (id) VALUES (1)').run()
+
+const BRAND_PUBLIC_FIELDS = ['site_name', 'site_tagline', 'logo_data', 'favicon_data', 'meta_description', 'meta_keywords']
+const BRAND_MAX_IMAGE_BYTES = 1.5 * 1024 * 1024 // data URI strings (legacy saves)
+const BRAND_UPLOAD_DIR = path.join(__dirname, 'uploads', 'branding')
+const BRAND_UPLOAD_URL_PREFIX = '/api/branding/uploads/'
+const BRAND_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+
+function getSiteSettings() {
+  const row = db.prepare('SELECT * FROM site_settings WHERE id = 1').get()
+  let landing = null
+  if (row?.landing_json) {
+    try { landing = JSON.parse(row.landing_json) } catch { landing = null }
+  }
+  return { ...row, landing }
+}
+
+/* Delete a previously-saved branding upload (replaced or cleared image). */
+function deleteBrandingUpload(value) {
+  if (!value || !value.startsWith(BRAND_UPLOAD_URL_PREFIX)) return
+  const filename = path.basename(value) // basename strips any traversal attempt
+  const full = path.join(BRAND_UPLOAD_DIR, filename)
+  if (!full.startsWith(BRAND_UPLOAD_DIR)) return
+  try { fs.unlinkSync(full) } catch { /* already gone */ }
+}
+
+/* True when the stored value points at a file in the uploads folder. */
+const isBrandUploadUrl = (v) => typeof v === 'string' && v.startsWith(BRAND_UPLOAD_URL_PREFIX)
 
 /* ---------- helpers ---------- */
 function requireAuth(req, res, next) {
@@ -2180,6 +2230,136 @@ app.put('/api/preferences', requireAuth, (req, res) => {
   }
   const row = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.userId)
   res.json({ preferences: row })
+})
+
+/* ---------- Branding: global site settings ----------
+   GET is public (no auth) — the landing page, login and register screens all
+   render before the visitor has a token, so branding must be readable
+   anonymously. PUT is admin/manager only. */
+app.get('/api/branding', (req, res) => {
+  const s = getSiteSettings()
+  const out = {}
+  for (const f of BRAND_PUBLIC_FIELDS) out[f] = s[f] || null
+  out.landing = s.landing || null
+  res.json({ branding: out })
+})
+
+/* Uploaded logo / favicon files — served under /api so the Vite dev proxy
+   (and express.static in production) reaches them with no extra config. */
+fs.mkdirSync(BRAND_UPLOAD_DIR, { recursive: true })
+app.use(BRAND_UPLOAD_URL_PREFIX, express.static(BRAND_UPLOAD_DIR, {
+  setHeaders: (res, filePath) => {
+    // Branding images are safe to cache; a new upload gets a new filename.
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    if (filePath.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml')
+  }
+}))
+
+const brandImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, BRAND_UPLOAD_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase().slice(0, 8) || '.png'
+      const kind = req.query.kind === 'favicon' ? 'favicon' : 'logo'
+      cb(null, `${kind}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`)
+    },
+  }),
+  limits: { fileSize: BRAND_UPLOAD_MAX_BYTES },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true)
+    cb(new Error('Only image files are allowed'))
+  },
+})
+
+app.post('/api/branding/upload', requireAuth, requireRole('admin', 'manager'), brandImageUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image file received' })
+  res.json({ url: `${BRAND_UPLOAD_URL_PREFIX}${req.file.filename}` })
+})
+
+app.put('/api/branding', requireAuth, requireRole('admin', 'manager'), (req, res) => {
+  const body = req.body || {}
+  const sets = []
+  const vals = []
+  let badField = null
+
+  const setTextField = (field, maxLen) => {
+    if (body[field] === undefined) return
+    if (body[field] === null || body[field] === '') { sets.push(`${field} = ?`); vals.push(null); return }
+    const v = String(body[field]).slice(0, maxLen)
+    sets.push(`${field} = ?`); vals.push(v)
+  }
+  const setImageField = (field) => {
+    if (body[field] === undefined) return
+    const next = body[field] ? String(body[field]) : null
+    if (next) {
+      // Accept an upload URL (file saved on disk via /api/branding/upload)
+      // or a legacy data URI — both render the same on the client.
+      const isDataUri = /^data:image\/(png|jpe?g|webp|svg\+xml|gif|ico);base64,[A-Za-z0-9+/=]+$/.test(next)
+      const isUploadUrl = next.startsWith(BRAND_UPLOAD_URL_PREFIX) && /^[A-Za-z0-9._-]+$/.test(path.basename(next))
+      if (!isDataUri && !isUploadUrl) {
+        badField = `${field} must be an uploaded image URL or a base64 image data URI`
+        return
+      }
+      if (isDataUri && next.length > BRAND_MAX_IMAGE_BYTES) {
+        badField = `${field} is too large (max ${Math.round(BRAND_MAX_IMAGE_BYTES / 1024)} KB) — upload it as a file instead`
+        return
+      }
+    }
+    // Replaced or cleared upload → remove the old file from disk
+    const prev = current?.[field]
+    if (prev && isBrandUploadUrl(prev) && prev !== next) deleteBrandingUpload(prev)
+    sets.push(`${field} = ?`); vals.push(next)
+  }
+
+  const current = getSiteSettings()
+  setTextField('site_name', 80)
+  setTextField('site_tagline', 200)
+  setImageField('logo_data')
+  setImageField('favicon_data')
+  setTextField('meta_description', 300)
+  setTextField('meta_keywords', 300)
+  if (body.landing !== undefined) {
+    if (body.landing === null) {
+      sets.push('landing_json = ?'); vals.push(null)
+    } else {
+      sets.push('landing_json = ?')
+      vals.push(JSON.stringify(body.landing).slice(0, 100 * 1024))
+    }
+  }
+
+  if (badField) return res.status(400).json({ error: badField })
+  if (sets.length) {
+    sets.push('updated_at = CURRENT_TIMESTAMP')
+    db.prepare(`UPDATE site_settings SET ${sets.join(', ')} WHERE id = 1`).run(...vals)
+  }
+  const s = getSiteSettings()
+  const out = {}
+  for (const f of BRAND_PUBLIC_FIELDS) out[f] = s[f] || null
+  res.json({ branding: out })
+})
+
+/* Dynamic PWA manifest — same shape as public/manifest.json but with the
+   site name / favicon / logo from site_settings (falls back to defaults). */
+app.get('/api/branding/manifest', (req, res) => {
+  const s = getSiteSettings()
+  const name = s.site_name || 'Pitch Studio'
+  const icon = s.favicon_data || s.logo_data || '/icons/icon-192.png'
+  res.json({
+    name,
+    short_name: name.split(/\s+/).slice(0, 2).join(' '),
+    description: s.meta_description || s.site_tagline || 'AI sales script generator for high-performing teams',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: '#7B61FF',
+    orientation: 'portrait-primary',
+    icons: [
+      { src: icon, sizes: '192x192', type: icon.startsWith('data:image') ? 'image/png' : 'image/png', purpose: 'maskable any' },
+      { src: icon, sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
+    ],
+    categories: ['business', 'productivity'],
+    lang: 'en',
+  })
 })
 
 /* ---------- P11.2: AI model accounts ---------- */

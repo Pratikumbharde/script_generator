@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './app.jsx'
 import { AuthProvider } from './src/context/AuthContext.jsx'
+import { BrandProvider } from './src/context/BrandContext.jsx'
 import ErrorBoundary from './src/components/ErrorBoundary.jsx'
 
 /* PWA service worker registration */
@@ -22,9 +23,11 @@ const root = createRoot(document.getElementById('root'))
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <BrandProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrandProvider>
     </ErrorBoundary>
   </React.StrictMode>
 )

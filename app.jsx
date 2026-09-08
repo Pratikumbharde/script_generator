@@ -26,6 +26,7 @@ import VoiceDNA from "./src/components/VoiceDNA.jsx";
 import Sidebar from "./src/components/Sidebar.jsx";
 import TourGuide from "./src/components/TourGuide.jsx";
 import { useAuth } from "./src/context/AuthContext.jsx";
+import { useBrand } from "./src/context/BrandContext.jsx";
 import { getPreferences } from "./src/api/client.js";
 import { STYLES } from "./src/styles/styles.js";
 import { S } from "./src/utils/helpers.js";
@@ -118,6 +119,7 @@ function parseRoute(pathname) {
 
 export default function PitchStudio() {
   const { user, workspace, loading: authLoading, logout, canGenerate } = useAuth();
+  const { branding } = useBrand();
 
   const [ready, setReady] = useState(false);
   // Public landing page before auth; 'auth' shows the login/register form.
@@ -478,7 +480,7 @@ export default function PitchStudio() {
       {installPrompt && (
         <div className="ds-install-prompt">
           <div>
-            <div className="title">Install Pitch Studio</div>
+            <div className="title">Install {branding.site_name}</div>
             <div className="body">Access your workspace faster from your home screen.</div>
           </div>
           <div className="actions">

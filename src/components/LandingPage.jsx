@@ -3,14 +3,25 @@ import {
   ArrowRight, Check, Zap, Timer, Languages, Shield, BarChart3,
   MessageSquareText, Users, MapPin, Sparkles, Sun, Moon,
 } from 'lucide-react'
+import { useBrand } from '../context/BrandContext.jsx'
 
 /* ============================================================
    LandingPage — public marketing page shown before auth.
-   Explains what Pitch Studio is, with Sign in / Register CTAs.
+   Explains what the product is, with Sign in / Register CTAs.
+   All copy comes from the site branding (Settings > Landing Page,
+   with the shipped defaults as fallback), so it's editable from
+   the admin panel without touching this file.
    Uses the app's CSS variables so it follows light/dark theme,
    with a nav toggle for visitors (persisted to localStorage).
    Sections reveal on scroll via IntersectionObserver.
    ============================================================ */
+
+/* Render the hero heading, converting **highlight** markers into the
+   accent-gradient <em>. Text without markers renders unchanged. */
+function renderEm(text) {
+  const parts = String(text || '').split(/\*\*(.+?)\*\*/g)
+  return parts.map((part, i) => (i % 2 === 1 ? <em key={i}>{part}</em> : <React.Fragment key={i}>{part}</React.Fragment>))
+}
 
 const LP_STYLES = `
 .lp-wrap{min-height:100vh;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);
@@ -33,6 +44,7 @@ a.lp-link{color:inherit;text-decoration:none}
 .lp-brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:-.01em}
 .lp-brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-bg);transition:box-shadow .3s ease,transform .3s ease}
 .lp-brand:hover .dot{transform:scale(1.25);box-shadow:0 0 0 6px var(--accent-bg)}
+.lp-brand-logo{width:52px;height:52px;border-radius:6px;object-fit:contain;display:block}
 .lp-nav-actions{display:flex;align-items:center;gap:10px}
 
 /* theme toggle */
@@ -195,6 +207,20 @@ a.lp-link{color:inherit;text-decoration:none}
 const d = (i, base = 90) => ({ transitionDelay: `${i * base}ms` })
 
 export default function LandingPage({ onSignIn, onRegister }) {
+  // Site branding — name, logo and all section copy (falls back to defaults).
+  const { branding, landing } = useBrand()
+  const logo = branding.logo_data
+  const siteName = branding.site_name
+
+  const BrandMark = () => (
+    <div className="lp-brand">
+      {logo
+        ? <img src={logo} alt={siteName} className="lp-brand-logo" />
+        : <span className="dot" />}
+      <span>{siteName}</span>
+    </div>
+  )
+
   // Light/dark toggle — mirrors the in-app theme (same localStorage key the app reads).
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('ps_theme') || 'light' } catch { return 'light' }
@@ -240,7 +266,7 @@ export default function LandingPage({ onSignIn, onRegister }) {
       {/* nav */}
       <header className="lp-inner lp-reveal">
         <nav className="lp-nav">
-          <div className="lp-brand"><span className="dot" />Pitch Studio</div>
+          <BrandMark />
           <div className="lp-nav-actions">
             <button
               className="lp-theme"
@@ -258,31 +284,23 @@ export default function LandingPage({ onSignIn, onRegister }) {
 
       {/* hero */}
       <section className="lp-inner lp-hero">
-        <div className="lp-eyebrow lp-reveal" style={d(0)}><Sparkles size={13} /> AI-powered sales enablement</div>
-        <h1 className="lp-h1 lp-reveal" style={d(1)}>Walk into every sales call with the <em>perfect script</em> — already in your pocket.</h1>
-        <p className="lp-sub lp-reveal" style={d(2)}>
-          Pitch Studio is a live-call cockpit for sales teams. Enter your product once, pick a methodology,
-          and AI writes a time-segmented call script with objection handling — so every rep pitches like your best rep.
-        </p>
+        <div className="lp-eyebrow lp-reveal" style={d(0)}><Sparkles size={13} /> {landing.eyebrow}</div>
+        <h1 className="lp-h1 lp-reveal" style={d(1)}>{renderEm(landing.hero_title)}</h1>
+        <p className="lp-sub lp-reveal" style={d(2)}>{landing.hero_subtitle}</p>
         <div className="lp-reveal" style={d(3)}><CtaButtons onSignIn={onSignIn} onRegister={onRegister} /></div>
-        <div className="lp-note lp-reveal" style={d(4)}>Free to start · No credit card · Your scripts stay saved — never regenerated</div>
+        <div className="lp-note lp-reveal" style={d(4)}>{landing.hero_note}</div>
 
         {/* flow strip */}
         <div className="lp-flow">
-          <div className="lp-flow-step lp-card-h lp-reveal" style={d(5)}>
-            <b>1 · Describe your product once</b>
-            <span>What it does, who it's for, pain points, proof — entered a single time.</span>
-          </div>
-          <div className="lp-flow-arrow lp-reveal" style={d(6)}><ArrowRight size={18} /></div>
-          <div className="lp-flow-step lp-card-h lp-reveal" style={d(7)}>
-            <b>2 · Pick methodology + call type</b>
-            <span>SPIN, MEDDIC, Challenger… for cold calls, demos, discovery, negotiation and more.</span>
-          </div>
-          <div className="lp-flow-arrow lp-reveal" style={d(8)}><ArrowRight size={18} /></div>
-          <div className="lp-flow-step lp-card-h lp-reveal" style={d(9)}>
-            <b>3 · Run the live call</b>
-            <span>A time-segmented cockpit with "say this" lines, coaching notes and objection answers.</span>
-          </div>
+          {landing.flow.map((step, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <div className="lp-flow-arrow lp-reveal" style={d(i * 3 - 1)}><ArrowRight size={18} /></div>}
+              <div className="lp-flow-step lp-card-h lp-reveal" style={d(i * 3 + 1)}>
+                <b>{step.title}</b>
+                <span>{step.body}</span>
+              </div>
+            </React.Fragment>
+          ))}
         </div>
       </section>
 
@@ -290,18 +308,13 @@ export default function LandingPage({ onSignIn, onRegister }) {
       <section className="lp-section lp-section-tint">
         <div className="lp-inner lp-split">
           <div>
-            <div className="lp-kicker lp-reveal">What is Pitch Studio?</div>
-            <h2 className="lp-h2 lp-reveal" style={d(1)}>Not another script library. A cockpit you run the call from.</h2>
-            <p className="lp-lead lp-reveal" style={d(2)}>
-              Most teams keep pitch docs nobody reads. Pitch Studio turns your product knowledge into a
-              live, minute-by-minute playbook: each segment of your call shows exactly what to say out loud,
-              what to keep to yourself, and how to handle whatever the buyer throws at you — timed to your call length.
-            </p>
+            <div className="lp-kicker lp-reveal">{landing.what.kicker}</div>
+            <h2 className="lp-h2 lp-reveal" style={d(1)}>{landing.what.title}</h2>
+            <p className="lp-lead lp-reveal" style={d(2)}>{landing.what.body}</p>
             <ul className="lp-checklist">
-              <li className="lp-reveal" style={d(3)}><span className="lp-tick"><Check size={12} /></span>Scripts are saved forever and only change when you say so</li>
-              <li className="lp-reveal" style={d(4)}><span className="lp-tick"><Check size={12} /></span>Every line split into "say aloud" vs. "coaching — for you only"</li>
-              <li className="lp-reveal" style={d(5)}><span className="lp-tick"><Check size={12} /></span>One-click translations for the languages your team speaks</li>
-              <li className="lp-reveal" style={d(6)}><span className="lp-tick"><Check size={12} /></span>Post-call outcome tracking feeds win-rate analytics</li>
+              {landing.what.checklist.map((item, i) => (
+                <li key={i} className="lp-reveal" style={d(i + 3)}><span className="lp-tick"><Check size={12} /></span>{item}</li>
+              ))}
             </ul>
           </div>
           <div className="lp-mock lp-reveal" style={d(3)} aria-hidden="true">
@@ -332,25 +345,17 @@ export default function LandingPage({ onSignIn, onRegister }) {
       {/* how it works */}
       <section className="lp-section">
         <div className="lp-inner">
-          <div className="lp-kicker lp-reveal">How it works</div>
-          <h2 className="lp-h2 lp-reveal" style={d(1)}>From product page to call-ready in three steps</h2>
-          <p className="lp-lead lp-reveal" style={d(2)}>Setup takes minutes. After that, generating a new script for any call type takes seconds.</p>
+          <div className="lp-kicker lp-reveal">{landing.how.kicker}</div>
+          <h2 className="lp-h2 lp-reveal" style={d(1)}>{landing.how.title}</h2>
+          <p className="lp-lead lp-reveal" style={d(2)}>{landing.how.lead}</p>
           <div className="lp-steps">
-            <div className="lp-step lp-reveal" style={d(0, 120)}>
-              <div className="lp-step-num">1</div>
-              <b>Add your product</b>
-              <p>Name, category, one-liner, ideal customer, pain points, differentiators, pricing and proof points — a two-minute form that powers every script you'll ever generate.</p>
-            </div>
-            <div className="lp-step lp-reveal" style={d(1, 120)}>
-              <div className="lp-step-num">2</div>
-              <b>Configure the call</b>
-              <p>Choose a sales methodology, call type and duration. Pick tone — soft, balanced or hard — plus language, region and delivery style.</p>
-            </div>
-            <div className="lp-step lp-reveal" style={d(2, 120)}>
-              <div className="lp-step-num">3</div>
-              <b>Run the call live</b>
-              <p>Open the cockpit, hit "Start call", and work through timed phases with say-aloud lines, private coaching and instant objection handling.</p>
-            </div>
+            {landing.how.steps.map((step, i) => (
+              <div key={i} className="lp-step lp-reveal" style={d(i, 120)}>
+                <div className="lp-step-num">{i + 1}</div>
+                <b>{step.title}</b>
+                <p>{step.body}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -358,39 +363,19 @@ export default function LandingPage({ onSignIn, onRegister }) {
       {/* features */}
       <section className="lp-section lp-section-tint">
         <div className="lp-inner">
-          <div className="lp-kicker lp-reveal">Everything around the call</div>
-          <h2 className="lp-h2 lp-reveal" style={d(1)}>Built for the whole sales motion, not just the pitch</h2>
+          <div className="lp-kicker lp-reveal">{landing.features.kicker}</div>
+          <h2 className="lp-h2 lp-reveal" style={d(1)}>{landing.features.title}</h2>
           <div className="lp-feats">
-            <div className="lp-feat lp-reveal" style={d(0, 100)}>
-              <div className="lp-feat-ic"><Zap size={18} /></div>
-              <b>15+ sales methodologies</b>
-              <p>SPIN, MEDDIC, Challenger, Sandler, BANT, Gap and more — the AI adapts tone and structure to the method you pick.</p>
-            </div>
-            <div className="lp-feat lp-reveal" style={d(1, 100)}>
-              <div className="lp-feat-ic"><MessageSquareText size={18} /></div>
-              <b>Objection handling</b>
-              <p>Search any objection and get a reframe in your method's style — never argue, always redirect.</p>
-            </div>
-            <div className="lp-feat lp-reveal" style={d(2, 100)}>
-              <div className="lp-feat-ic"><Timer size={18} /></div>
-              <b>Live call timer</b>
-              <p>Segments mapped to your call length with a running clock, so you always know where you are in the pitch.</p>
-            </div>
-            <div className="lp-feat lp-reveal" style={d(3, 100)}>
-              <div className="lp-feat-ic"><Languages size={18} /></div>
-              <b>10 languages, one script</b>
-              <p>Generate side-by-side translations — English, Hindi, Hinglish, Marathi, Tamil and more — for every teammate.</p>
-            </div>
-            <div className="lp-feat lp-reveal" style={d(4, 100)}>
-              <div className="lp-feat-ic"><BarChart3 size={18} /></div>
-              <b>Analytics & win rates</b>
-              <p>Track outcomes per script, spot which methods close, and see which phrases actually land.</p>
-            </div>
-            <div className="lp-feat lp-reveal" style={d(5, 100)}>
-              <div className="lp-feat-ic"><Users size={18} /></div>
-              <b>Team workspace</b>
-              <p>Roles and permissions, shared scripts, coaching feedback and leaderboards that keep the whole team sharp.</p>
-            </div>
+            {landing.features.items.map((feat, i) => {
+              const FeatIcon = FEAT_ICONS[i % FEAT_ICONS.length]
+              return (
+                <div key={i} className="lp-feat lp-reveal" style={d(i, 100)}>
+                  <div className="lp-feat-ic"><FeatIcon size={18} /></div>
+                  <b>{feat.title}</b>
+                  <p>{feat.body}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -399,33 +384,22 @@ export default function LandingPage({ onSignIn, onRegister }) {
       <section className="lp-section">
         <div className="lp-inner lp-split">
           <div>
-            <div className="lp-kicker lp-reveal">Who it's for</div>
-            <h2 className="lp-h2 lp-reveal" style={d(1)}>One workspace for reps, managers and founders</h2>
-            <p className="lp-lead lp-reveal" style={d(2)}>
-              SDRs walk into cold calls prepared. Account executives run discovery and demos from a cockpit
-              instead of sticky notes. Sales managers coach from real data — not gut feel. And founders can
-              finally hand their pitch to a new hire without it falling apart on call three.
-            </p>
+            <div className="lp-kicker lp-reveal">{landing.who.kicker}</div>
+            <h2 className="lp-h2 lp-reveal" style={d(1)}>{landing.who.title}</h2>
+            <p className="lp-lead lp-reveal" style={d(2)}>{landing.who.lead}</p>
           </div>
           <div style={{ display: 'grid', gap: 18 }}>
-            <div className="lp-side lp-reveal" style={d(0, 120)}>
-              <div className="lp-side-top">
-                <div className="lp-side-ic"><Shield size={17} /></div>
-                <div><b>Your data stays yours</b><p>Each company gets a private workspace — products, scripts and team data are scoped to you.</p></div>
-              </div>
-            </div>
-            <div className="lp-side lp-reveal" style={d(1, 120)}>
-              <div className="lp-side-top">
-                <div className="lp-side-ic"><Timer size={17} /></div>
-                <div><b>Works on any device</b><p>Installable as an app (PWA) — keep the cockpit open on a second screen during live calls.</p></div>
-              </div>
-            </div>
-            <div className="lp-side lp-reveal" style={d(2, 120)}>
-              <div className="lp-side-top">
-                <div className="lp-side-ic"><BarChart3 size={17} /></div>
-                <div><b>Gets smarter with use</b><p>Conversation Intelligence surfaces your best-performing phrases so scripts keep improving.</p></div>
-              </div>
-            </div>
+            {landing.who.cards.map((card, i) => {
+              const CardIcon = SIDE_ICONS[i % SIDE_ICONS.length]
+              return (
+                <div key={i} className="lp-side lp-reveal" style={d(i, 120)}>
+                  <div className="lp-side-top">
+                    <div className="lp-side-ic"><CardIcon size={17} /></div>
+                    <div><b>{card.title}</b><p>{card.body}</p></div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -433,8 +407,8 @@ export default function LandingPage({ onSignIn, onRegister }) {
       {/* final cta */}
       <section className="lp-inner lp-reveal" style={{ paddingBottom: 72 }}>
         <div className="lp-band">
-          <h2>Ready to pitch like your best rep — every call?</h2>
-          <p>Create your workspace in under a minute. Your first script is a few clicks away.</p>
+          <h2>{landing.cta.title}</h2>
+          <p>{landing.cta.body}</p>
           <div className="lp-cta">
             <button className="lp-btn lp-btn-pri" onClick={onRegister}>Register free <ArrowRight size={16} /></button>
             <button className="lp-btn lp-btn-ghost" onClick={onSignIn}>I already have an account</button>
@@ -443,12 +417,17 @@ export default function LandingPage({ onSignIn, onRegister }) {
       </section>
 
       <footer className="lp-inner lp-footer lp-reveal">
-        <div className="lp-brand"><span className="dot" />Pitch Studio</div>
-        <div>The live-call cockpit for sales teams — script it, say it, close it.</div>
+        <BrandMark />
+        <div>{landing.footer_tagline}</div>
       </footer>
     </div>
   )
 }
+
+/* Icons for the feature grid / who-it's-for cards — keep the original
+   per-slot look no matter how the admin edits the copy. */
+const FEAT_ICONS = [Zap, MessageSquareText, Timer, Languages, BarChart3, Users]
+const SIDE_ICONS = [Shield, Timer, BarChart3]
 
 function CtaButtons({ onSignIn, onRegister }) {
   return (

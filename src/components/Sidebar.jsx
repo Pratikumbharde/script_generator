@@ -7,6 +7,7 @@ import {
   ChevronRight, PanelLeftClose, PanelLeft, LogOut, HelpCircle, Briefcase, Menu,
   AudioWaveform
 } from "lucide-react";
+import { useBrand } from "../context/BrandContext.jsx";
 
 /* ============================================================
    Enterprise Sidebar — clean grouped navigation with Lucide icons
@@ -121,6 +122,7 @@ function getInitials(email) {
 }
 
 export default function Sidebar({ view, setView, active, company, workspace, user, logout, canGenerate }) {
+  const { branding } = useBrand();
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("ps_sidebar_collapsed") === "true"; } catch { return false; }
   });
@@ -235,8 +237,10 @@ export default function Sidebar({ view, setView, active, company, workspace, use
         {/* Brand */}
         <div className="es-brand">
           <div className="es-brand-mark">
-            <span className="es-brand-dot" />
-            {!collapsed && <span className="es-brand-text">Pitch Studio</span>}
+            {branding.logo_data
+              ? <img src={branding.logo_data} alt={branding.site_name} className="es-brand-logo" />
+              : <span className="es-brand-dot" />}
+            {!collapsed && <span className="es-brand-text">{branding.site_name}</span>}
           </div>
           <button className="es-collapse-btn" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? "Expand" : "Collapse"}>
             {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
@@ -244,12 +248,12 @@ export default function Sidebar({ view, setView, active, company, workspace, use
         </div>
 
         {/* Workspace */}
-        <div className="es-workspace">
+        {/* <div className="es-workspace">
           <span className="es-workspace-icon"><Briefcase size={16} strokeWidth={2} /></span>
           {!collapsed && (
             <span className="es-workspace-name">{company || workspace?.name || user?.company_name || "Workspace"}</span>
           )}
-        </div>
+        </div> */}
 
         {/* Nav groups */}
         <div className="es-nav-scroll">

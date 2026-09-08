@@ -76,6 +76,7 @@ html[data-theme="dark"]{
 .es-brand{display:flex;align-items:center;justify-content:space-between;padding:18px 16px 14px;flex-shrink:0;border-bottom:1px solid var(--sb-border)}
 .es-brand-mark{display:flex;align-items:center;gap:11px;min-width:0}
 .es-brand-dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,var(--accent) 0%,#6366F1 100%);box-shadow:0 0 0 3px rgba(99,102,241,.2);flex-shrink:0}
+.es-brand-logo{width:40px;height:40px;border-radius:5px;object-fit:contain;flex-shrink:0}
 .es-brand-text{font-family:'Space Grotesk';font-weight:700;font-size:18px;color:var(--sb-fg-bright);letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .es-collapse-btn{width:30px;height:30px;border-radius:8px;border:none;background:var(--sb-hover);color:var(--sb-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
 .es-collapse-btn:hover{background:var(--sb-active-bg);color:var(--sb-fg-bright)}
@@ -279,7 +280,32 @@ html[data-theme="dark"]{
 
 /* forms */
 .ps-form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;max-width:760px}
-.frow{margin-bottom:17px}
+
+/* ---------- auth form (login / register / forgot / reset) ---------- */
+.af-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper);padding:24px 16px}
+.af-card{width:100%;max-width:420px;padding:32px 30px 26px}
+.af-head{text-align:center;margin-bottom:20px}
+.af-brand{display:flex;align-items:center;justify-content:center;margin-bottom:10px;color:var(--ink)}
+.af-brand-logo{max-width:152px;object-fit:contain;display:block}
+.af-sub{color:var(--muted);font-size:14px;margin-top:2px}
+.af-banner{margin:0 0 14px} /* .err/.ok-msg reset — banners sit above the fields, not pushed down */
+.af-fields{display:flex;flex-direction:column;gap:8px}
+.af-field{display:flex;flex-direction:column}
+.af-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.af-forgot{background:none;border:none;padding:0;font-family:'Inter';font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;transition:.13s}
+.af-forgot:hover{color:var(--accent-ink);text-decoration:underline}
+.af-meta{min-height:17px;margin-top:3px} /* ferr / fchar / fhint slot — equal height keeps rows aligned */
+.af-meta:empty{display:none}
+.af-submit{width:100%;justify-content:center;margin-top:16px}
+.af-switch{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:18px;font-size:13px;color:var(--muted)}
+.af-switch .ps-btn{flex:none}
+.af-divider{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft);text-align:center}
+.af-back{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-family:'Inter';font-weight:600;font-size:12.5px;cursor:pointer;transition:color .2s ease,border-color .2s ease,transform .15s ease}
+.af-back:hover{color:var(--accent);border-color:var(--accent)}
+.af-back:active{transform:scale(.97)}
+.ps-root[data-theme="dark"] .af-back{background:#1E293B;border-color:#334155;color:#94A3B8}
+.ps-root[data-theme="dark"] .af-back:hover{color:#93C5FD;border-color:#3B82F6}
+.frow{margin-bottom:10px}
 .frow.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .flab{display:block;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px}
 .flab .opt{color:var(--faint);font-weight:500}
