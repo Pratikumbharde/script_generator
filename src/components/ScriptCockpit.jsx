@@ -12,13 +12,14 @@ import VoiceRecorder from "./shared/VoiceRecorder.jsx";
 import DiarizedTranscript from "./shared/DiarizedTranscript.jsx";
 import CallCockpit from "./CallCockpit.jsx";
 import { createShareLink, updateScript } from "../api/client.js";
+import FollowUpModal from "./FollowUpModal.jsx";
 import ScriptComments from "./ScriptComments.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   Play, Pause, RotateCcw, Phone, Mic, ChevronRight,
   MoreHorizontal, Copy, Printer, Share2, FileText,
   CheckCircle2, AlertTriangle, Clock, Volume2, Globe,
-  Sparkles, Pencil, Plus, X, Trash2, Check, AudioWaveform
+  Sparkles, Pencil, Plus, X, Trash2, Check, AudioWaveform, Mail
 } from "lucide-react";
 
 /* ============================================================
@@ -52,6 +53,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
   const [shareLoading, setShareLoading] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
 
   // Overflow menu
   const [menuOpen, setMenuOpen] = useState(false);
@@ -286,7 +288,7 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
       <div className="ps-container">
       <div className="ps-top" style={{ paddingTop: 18 }}>
         <div>
-          <div className="crumb" onClick={onBack}>← Products</div>
+          <div className="crumb" onClick={onBack}>← Back</div>
           <div className="ps-eyebrow">{product.name}</div>
           <div className="ps-title">{callType.name} · {duration} min</div>
           <div className="ps-sub">
@@ -666,6 +668,11 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
                     </button>
                   ))}
                 </div>
+                {script.id && (
+                  <button className="ps-btn ghost" style={{ marginTop: 10, fontSize: 13 }} onClick={() => setShowFollowUp(true)}>
+                    <Mail size={14} /> Draft follow-up now
+                  </button>
+                )}
               </div>
               <button className="ps-btn ghost" onClick={markUsed} disabled={savingMeta}>
                 {usedAt ? `Used ${new Date(usedAt).toLocaleDateString()}` : "Mark as used"}
@@ -731,6 +738,14 @@ export default function Cockpit({ product, method, callType, duration, meta, scr
             </div>
           </div>
         </div>
+      )}
+
+      {/* Follow-up email modal */}
+      {showFollowUp && script.id && (
+        <FollowUpModal
+          scriptId={script.id}
+          onClose={() => setShowFollowUp(false)}
+        />
       )}
 
       {/* Share modal */}

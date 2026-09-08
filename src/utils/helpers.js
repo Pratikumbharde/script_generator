@@ -213,6 +213,15 @@ function getAuthHeader() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/* Thinking models (glm via Ollama cloud) can emit their reasoning inline in
+   `content`, ending with a marker before the real answer — strip it so JSON
+   parsing and streamed previews only ever see the actual response. */
+export function stripThinkingPrefix(text) {
+  const s = String(text || "");
+  const idx = s.lastIndexOf("</think>");
+  return idx === -1 ? s : s.slice(idx + 8).replace(/^\s+/, "");
+}
+
 export async function callModel(system, prompt) {
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -230,7 +239,7 @@ export async function callModel(system, prompt) {
   });
   if (!res.ok) throw new Error(`Generation service returned ${res.status}. Try again in a moment.`);
   const data = await res.json();
-  return data.message?.content || data.response || "";
+  return stripThinkingPrefix(data.message?.content || data.response || "");
 }
 
 export async function callModelStream(system, prompt, onChunk) {
@@ -284,7 +293,7 @@ export async function callModelStream(system, prompt, onChunk) {
         const chunk = data.message?.content || data.response || "";
         if (chunk) {
           fullText += chunk;
-          onChunk(fullText, chunk);
+          onChunk(stripThinkingPrefix(fullText), chunk);
         }
       } catch (_) {
         // ignore incomplete JSON lines
@@ -292,7 +301,7 @@ export async function callModelStream(system, prompt, onChunk) {
     }
   }
 
-  return fullText;
+  return stripThinkingPrefix(fullText);
 }
 
 export function formatVoiceDNA(profile) {

@@ -1,0 +1,50 @@
+
+> script-generator@0.0.0 dev
+> concurrently "vite" "node server.js"
+
+[1] ◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[1] API server running on http://0.0.0.0:3001
+[1] Ollama upstream: http://localhost:11434 (model: glm-5.2:cloud)
+[1] ⚠️  OLLAMA_CLOUD_BASE_URL points to localhost. Make sure Ollama is running locally, or update .env to your cloud endpoint.
+[0] 
+[0]   [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m414[22m[2m[0m ms[22m
+[0] 
+[0]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[0]   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.1.9:[1m5173[22m/[39m
+[0] [2m4:48:32 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m4:48:35 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m4:48:38 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m4:48:41 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Sidebar.jsx[22m
+[0] [2m4:48:43 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Sidebar.jsx[22m
+[0] [2m4:48:46 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Sidebar.jsx[22m
+[0] [2m5:00:35 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/FollowUpModal.jsx[22m
+[0] [2m5:00:38 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/FollowUpModal.jsx[22m
+[0] [2m5:00:45 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/FollowUpModal.jsx[22m
+[0] [2m5:00:49 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/FollowUpModal.jsx[22m
+[0] [2m5:03:42 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/FollowUpModal.jsx[22m
+[0] [2m5:06:01 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:06:07 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:06:10 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:06:16 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:06:18 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/StudioView.jsx[22m
+[0] [2m5:06:18 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ScriptCockpit.jsx[22m
+[0] [2m5:13:43 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:13:45 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/StudioView.jsx[22m
+[0] [2m5:13:48 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/StudioView.jsx[22m
+[0] [2m5:13:51 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/StudioView.jsx[22m
+[0] [2m5:15:01 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:15:06 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/app.jsx[22m
+[0] [2m5:23:59 PM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/context/AuthContext.jsx[22m
+[0] [2m5:23:59 PM[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/context/AuthContext.jsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[0] [2m5:23:59 PM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/context/AuthContext.jsx[22m
+[1] [AI proxy] Upstream 502: 
+[1] <html><head>
+[1] <meta http-equiv="content-type" content="text/html;charset=utf-8">
+[1] <title>502 Server Error</title>
+[1] </head>
+[1] <body text=#000000 bgcolor=#ffffff>
+[1] <h1>Error: Server Error</h1>
+[1] <h2>The server encountered a temporary error and could not complete your request.<p>Please try again in 30 seconds.</h2>
+[1] <h2></h2>
+[1] </body></html>
+[1] 

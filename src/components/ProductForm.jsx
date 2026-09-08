@@ -200,8 +200,6 @@ export default function ProductForm({ product, onCancel, onSaved }) {
     setAiLoading((p) => ({ ...p, [field]: true }));
     await new Promise((r) => setTimeout(r, 1200));
     const suggestions = {
-      oneLiner: "AI-powered sales platform that automates outreach and closes more deals in less time.",
-      description: "An intelligent sales automation platform that helps teams manage leads, automate follow-ups, and track performance in real time.",
       idealCustomer: "Sales managers and BDRs at fast-growing B2B SaaS companies with 20–200 employees.",
       painPoints: "Manual follow-ups slip through cracks. No visibility into rep activity. Leads go cold before anyone calls.",
       differentiators: "Sets up in under 1 hour (vs 2+ weeks). Native mobile app. Built-in auto-dialer. 40% lower cost than enterprise CRMs.",
@@ -245,7 +243,8 @@ export default function ProductForm({ product, onCancel, onSaved }) {
     const meta = FIELD_META[key];
     if (!meta) return null;
     const isTextarea = ["description", "painPoints", "differentiators", "proofPoints", "personas", "features", "commonObjections", "keyMessages"].includes(key);
-    const hasAi = ["oneLiner", "description", "idealCustomer", "painPoints", "differentiators", "proofPoints"].includes(key);
+    // AI generate button only on Customer/Proof sections — not on Product Basics (oneLiner, description)
+    const hasAi = ["idealCustomer", "painPoints", "differentiators", "proofPoints"].includes(key);
     const hasVoice = ["oneLiner", "description", "idealCustomer", "painPoints", "personas", "differentiators", "competitors", "proofPoints", "features", "commonObjections", "keyMessages"].includes(key);
 
     return (

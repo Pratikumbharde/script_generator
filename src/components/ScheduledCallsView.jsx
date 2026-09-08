@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { CalendarDays } from "lucide-react";
-import { listScheduledCalls, createScheduledCall, updateScheduledCall, deleteScheduledCall } from "../api/client.js";
+import { CalendarDays, Mail } from "lucide-react";
+import { listScheduledCalls, createScheduledCall, updateScheduledCall, deleteScheduledCall, listScripts } from "../api/client.js";
 import LimitedInput from './shared/LimitedInput.jsx'
 import LimitedTextarea from './shared/LimitedTextarea.jsx'
+import FollowUpModal from './FollowUpModal.jsx'
 
 const STATUSES = [
   { id: "scheduled", label: "Scheduled", color: "var(--accent-ink)" },
@@ -33,6 +34,20 @@ export default function ScheduledCallsView({ products }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [scripts, setScripts] = useState([]);
+  const [followUpCall, setFollowUpCall] = useState(null); // completed call being followed up
+
+  useEffect(() => {
+    listScripts().then(setScripts).catch(() => {});
+  }, []);
+
+  // A follow-up is drafted from a script — the linked one, or the rep's most
+  // recent script for the same product when the call has no direct link.
+  const resolveScriptId = (call) => {
+    if (call.script_id) return call.script_id;
+    const match = scripts.find((s) => String(s.meta?.productId) === String(call.product_id));
+    return match?.id || null;
+  };
 
   const [form, setForm] = useState({
     product_id: "",
@@ -229,6 +244,16 @@ export default function ScheduledCallsView({ products }) {
                         <button className="ps-btn ghost sm" onClick={() => updateStatus(c.id, "no_show")}>👻 No show</button>
                       </>
                     )}
+                    {c.status === "completed" && (
+                      <button
+                        className="ps-btn ghost sm"
+                        onClick={() => setFollowUpCall(c)}
+                        disabled={!resolveScriptId(c)}
+                        title={resolveScriptId(c) ? "Draft a follow-up email" : "No script available for this call's product"}
+                      >
+                        <Mail size={13} /> Follow up
+                      </button>
+                    )}
                     <button className="ps-btn danger sm" onClick={() => remove(c.id)}>Delete</button>
                   </div>
                 </div>
@@ -287,6 +312,16 @@ export default function ScheduledCallsView({ products }) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Follow-up email modal (completed calls only) */}
+        {followUpCall && (
+          <FollowUpModal
+            scriptId={resolveScriptId(followUpCall)}
+            recipient={followUpCall.prospect_email || null}
+            prospect={{ name: followUpCall.prospect_name, company: followUpCall.prospect_company }}
+            onClose={() => setFollowUpCall(null)}
+          />
         )}
       </div>
     </div>

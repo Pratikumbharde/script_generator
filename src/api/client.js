@@ -167,6 +167,28 @@ export async function deleteScript(id) {
   return fetchJson(`/scripts/${id}`, { method: 'DELETE' })
 }
 
+/* ---------- follow-up email draft ----------
+   GET returns the saved draft (or empty strings), POST generates a fresh AI
+   draft (replaces any saved one — only called on explicit Regenerate), PUT
+   saves manual edits. */
+export async function getFollowUp(scriptId) {
+  return fetchJson(`/scripts/${scriptId}/follow-up`)
+}
+
+export async function generateFollowUp(scriptId, context = {}) {
+  return fetchJson(`/scripts/${scriptId}/follow-up`, {
+    method: 'POST',
+    body: JSON.stringify(context),
+  })
+}
+
+export async function saveFollowUp(scriptId, data) {
+  return fetchJson(`/scripts/${scriptId}/follow-up`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
 /* ---------- workspace ---------- */
 export async function getWorkspace() {
   const data = await fetchJson('/workspace')

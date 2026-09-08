@@ -11,6 +11,7 @@ import BattleCardsView from "./src/components/BattleCardsView.jsx";
 import AnalyticsDashboard from "./src/components/AnalyticsDashboard.jsx";
 import RolePlayView from "./src/components/RolePlayView.jsx";
 import ScheduledCallsView from "./src/components/ScheduledCallsView.jsx";
+import FollowUpsView from "./src/components/FollowUpsView.jsx";
 import SettingsView from "./src/components/SettingsView.jsx";
 import AutomationRulesView from "./src/components/AutomationRulesView.jsx";
 import DataExportView from "./src/components/DataExportView.jsx";
@@ -20,6 +21,7 @@ import ProductForm from "./src/components/ProductForm.jsx";
 import ProductDetail from "./src/components/ProductDetail.jsx";
 import StudioView from "./src/components/StudioView.jsx";
 import TeamView from "./src/components/TeamView.jsx";
+import InviteAcceptView from "./src/components/InviteAcceptView.jsx";
 import CallAnalysisView from "./src/components/CallAnalysisView.jsx";
 import SelfImprovementView from "./src/components/SelfImprovementView.jsx";
 import VoiceDNA from "./src/components/VoiceDNA.jsx";
@@ -70,6 +72,7 @@ const ROUTE_PATHS = {
   add: "/products/new",          // /product/:id/edit for edit mode
   studio: "/studio",
   scripts: "/scripts",
+  followups: "/follow-ups",
   training: "/training",
   practice: "/practice",
   roleplay: "/roleplay",
@@ -106,6 +109,7 @@ function parseRoute(pathname) {
   let m;
   if ((m = p.match(/^\/product\/([^/]+)\/edit$/))) return { view: "add", id: m[1] };
   if ((m = p.match(/^\/product\/([^/]+)$/))) return { view: "product", id: m[1] };
+  if ((m = p.match(/^\/invite\/([^/]+)$/))) return { view: "invite", id: m[1] }; // from team-invite emails
   return { view: ROUTE_VIEWS[p] || null, id: null };
 }
 
@@ -134,6 +138,8 @@ export default function PitchStudio() {
   // resolved once the products list loads.
   const initialRoute = parseRoute(window.location.pathname);
   const routeIdRef = useRef(initialRoute.id || null);
+  // Team-invite email links land on /invite/:token — a public accept page.
+  const inviteTokenRef = useRef(initialRoute.view === "invite" ? initialRoute.id : null);
   const [view, setViewState] = useState(() => {
     if (initialRoute.view) return initialRoute.view;
     // Members default to scripts view
@@ -157,6 +163,7 @@ export default function PitchStudio() {
   const [active, setActive] = useState(null); // active product for studio
   const [preset, setPreset] = useState(null); // preset setup when opening from library
   const [studioNonce, setStudioNonce] = useState(0);
+  const [studioFrom, setStudioFrom] = useState(null); // where the user entered Call Studio from ("scripts" | null)
   const [staff, setStaff] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [analysisScriptId, setAnalysisScriptId] = useState(
@@ -207,7 +214,12 @@ export default function PitchStudio() {
   const saveCompany = async (name) => { setCompany(name); await S.set("psettings:company", { name }); };
   const refreshProducts = async () => setProducts(await S.list("pproduct:"));
   const refreshStaff = async () => setStaff(await S.list("pstaff:"));
-  const openStudio = (product, ps = null) => { setActive(product); setPreset(ps); setStudioNonce((n) => n + 1); setView("studio"); };
+  const openStudio = (product, ps = null, from = null) => { setActive(product); setPreset(ps); setStudioFrom(from); setStudioNonce((n) => n + 1); setView("studio"); };
+  const backFromStudio = () => { // "Back" in Call Studio returns to where the user came from — the workspace picker by default
+    setActive(null); setPreset(null);
+    if (studioFrom === "scripts") { setStudioFrom(null); setView("scripts"); }
+    else setStudioFrom(null);
+  };
   const teamLanguages = [...new Set(staff.flatMap((s) => s.languages || ["en"]))];
   const isMember = user?.role === 'member';
 
@@ -298,9 +310,11 @@ export default function PitchStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, ready]);
 
-  // Logged out again (logout / expired session) → back to the public root
+  // Logged out again (logout / expired session) → back to the public root.
+  // Never hijacks /invite/:token — that public page accepts team invitations.
   useEffect(() => {
     if (user || authLoading) return;
+    if (inviteTokenRef.current) return;
     if (!AUTH_PATHS[normalizePath(window.location.pathname)]) {
       window.history.replaceState({}, "", "/");
       setAuthScreen("landing");
@@ -314,6 +328,18 @@ export default function PitchStudio() {
     }
   }, [user, isMember]);
 
+  // Logout wrapper: reset the auth screen to the landing page in the SAME
+  // event that clears the user, so the first logged-out render is already
+  // the landing page — no login-page flash. (authScreen stays whatever the
+  // sign-in flow left it at, e.g. "auth", for the rest of the session.)
+  const handleLogout = () => {
+    setAuthScreen("landing");
+    if (!inviteTokenRef.current && window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
+    }
+    logout();
+  };
+
   if (authLoading) return (
     <div className="ps-root"><style>{STYLES}</style>
       <div className="ps-shell">
@@ -322,6 +348,13 @@ export default function PitchStudio() {
           <CardSkeleton count={4} />
         </main>
       </div>
+    </div>
+  );
+
+  // Public team-invite accept page (from email links) — works logged in or out.
+  if (inviteTokenRef.current) return (
+    <div className="ps-root"><style>{STYLES}</style>
+      <InviteAcceptView token={inviteTokenRef.current} />
     </div>
   );
 
@@ -358,7 +391,7 @@ export default function PitchStudio() {
   return (
     <div className="ps-root"><style>{STYLES}</style>
       <div className="ps-shell">
-        <Sidebar view={view} setView={setView} active={active} company={company} workspace={workspace} user={user} logout={logout} canGenerate={canGenerate} />
+        <Sidebar view={view} setView={setView} active={active} company={company} workspace={workspace} user={user} logout={handleLogout} canGenerate={canGenerate} />
         <TourGuide view={view} setView={setView} user={user} canGenerate={canGenerate} />
 
         <main className="ps-main">
@@ -388,19 +421,19 @@ export default function PitchStudio() {
               key={active ? active.id + "-" + studioNonce : "empty"}
               product={active}
               products={products}
-              onSelectProduct={(p) => { setActive(p); setStudioNonce((n) => n + 1); }}
+              onSelectProduct={(p) => { setActive(p); setPreset(null); setStudioNonce((n) => n + 1); }}
               preset={preset}
               teamLanguages={teamLanguages}
               staff={staff}
-              onBack={() => setView("products")}
+              onBack={backFromStudio}
               canGenerate={canGenerate}
               onAnalyze={(script) => { setAnalysisScriptId(script?.id || null); setView("analysis", { script: script?.id || null }); }}
             />
           )}
           {view === "scripts" && (
             <ScriptsView products={products} teamLanguages={teamLanguages}
-              onOpen={(rec) => { const prod = products.find((p) => p.id === rec.meta.productId); if (prod) openStudio(prod, rec.meta); }}
-              onVariant={(rec) => { const prod = products.find((p) => p.id === rec.meta.productId); if (prod) openStudio(prod, { ...rec.meta, setupOnly: true }); }}
+              onOpen={(rec) => { const prod = products.find((p) => p.id === rec.meta.productId); if (prod) openStudio(prod, rec.meta, "scripts"); }}
+              onVariant={(rec) => { const prod = products.find((p) => p.id === rec.meta.productId); if (prod) openStudio(prod, { ...rec.meta, setupOnly: true }, "scripts"); }}
               onGoStudio={() => products[0] ? openStudio(products[0]) : setView("products")} />
           )}
           {view === "team" && (
@@ -426,6 +459,9 @@ export default function PitchStudio() {
           )}
           {view === "schedule" && (
             <ScheduledCallsView products={products} />
+          )}
+          {view === "followups" && (
+            <FollowUpsView />
           )}
           {view === "settings" && (
             <SettingsView />

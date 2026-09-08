@@ -20,6 +20,37 @@ import LimitedTextarea from './shared/LimitedTextarea.jsx'
    Shows team members, roles, invite, and script assignment
    ============================================================ */
 
+/* ---------- shared validation helpers (same pattern as ComponentLibrary) ---------- */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+const URL_RE = /^https?:\/\/\S+\.\S+/i
+const ERR_STYLE = { fontSize: 12, color: "#B23237", marginTop: 4 }
+const HINT_STYLE = { fontSize: 12, color: "var(--muted)", marginTop: 4 }
+const redBorder = (bad) => (bad ? { borderColor: "#B23237" } : undefined)
+
+/* Red error text, or the muted live hint when there is no error yet. */
+function FieldHint({ error, hint }) {
+  if (error) return <div style={ERR_STYLE}>{error}</div>
+  if (hint) return <div style={HINT_STYLE}>{hint}</div>
+  return null
+}
+
+/* Keyboard guard for text-only fields — digits are rejected as you type. */
+function useDigitGuard() {
+  const [digitErr, setDigitErr] = useState("");
+  const timer = useRef(null);
+  const onKeyDown = (e) => {
+    if (/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+      setDigitErr("Numbers are not allowed in this field");
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setDigitErr(""), 2200);
+    }
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const strip = (v) => String(v).replace(/[0-9]/g, ""); // paste-safe
+  return { digitErr, onKeyDown, strip, setDigitErr };
+}
+
 export default function TeamView({ company, staff, products, workspace, onSaveCompany, onRefresh, user, canGenerate }) {
   const { setWorkspace } = useAuth();
   const [members, setMembers] = useState([]);
@@ -39,6 +70,12 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
   const toastTimer = useRef(null);
 
   const isAdmin = user?.role === "admin";
+
+  /* Validation for the invite form */
+  const inviteEmailBad = inviteEmail.trim().length > 0 && !EMAIL_RE.test(inviteEmail.trim());
+  const inviteEmailOk = EMAIL_RE.test(inviteEmail.trim());
+  const nameGuard = useDigitGuard();
+  const inviteNameBad = inviteName.trim().length > 0 && inviteName.trim().length < 3;
 
   /* Shared save feedback toast — success ("ok") / failure ("bad") */
   const notify = (type, msg) => {
@@ -77,7 +114,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
   };
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmailOk) return;
     setInviteBusy(true);
     setInviteMsg("");
     setInviteErr("");
@@ -168,11 +205,16 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
             <div className="frow two" style={{ marginBottom: 12 }}>
               <div>
                 <label className="flab">Email address<span className="req">*</span></label>
-                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} style={redBorder(inviteEmailBad)} onChange={(e) => setInviteEmail(e.target.value)} />
+                <FieldHint error={inviteEmailBad ? "Enter a valid email address (e.g. teammate@company.com)" : null} />
               </div>
               <div>
                 <label className="flab">Name (optional)</label>
-                <LimitedInput className="finp" maxLength={200} placeholder="Full name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} />
+                <LimitedInput className="finp" maxLength={200} placeholder="Full name" value={nameGuard.strip(inviteName)} style={redBorder(nameGuard.digitErr)} onChange={(e) => setInviteName(nameGuard.strip(e.target.value))} onKeyDown={nameGuard.onKeyDown} />
+                <FieldHint
+                  error={nameGuard.digitErr || null}
+                  hint={inviteNameBad ? `Minimum 3 characters required — ${3 - inviteName.trim().length} more to go` : null}
+                />
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
@@ -183,7 +225,7 @@ export default function TeamView({ company, staff, products, workspace, onSaveCo
               </select>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="ps-btn pri" disabled={!inviteEmail.trim() || inviteBusy} onClick={handleInvite}>
+              <button className="ps-btn pri" disabled={!inviteEmailOk || inviteNameBad || inviteBusy} onClick={handleInvite}>
                 {inviteBusy ? "Sending…" : "Send Invite"}
               </button>
               <button className="ps-btn ghost" onClick={() => { setShowInvite(false); setInviteMsg(""); setInviteErr(""); }}>Cancel</button>
@@ -312,15 +354,26 @@ function WorkspaceSettings({ workspace, notify }) {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState("");
   const [inviteErr, setInviteErr] = useState("");
-  const [joinToken, setJoinToken] = useState("");
+  // Pre-fill from an invite email link (…/team?invite=<token>)
+  const [joinToken, setJoinToken] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("invite") || "" } catch { return "" }
+  });
   const [joinMsg, setJoinMsg] = useState("");
   const [joinErr, setJoinErr] = useState("");
+  const nameGuard = useDigitGuard();
 
   useEffect(() => {
     if (workspace?.name) setWsName(workspace.name);
   }, [workspace?.name]);
 
+  /* Live validation */
+  const wsNameBad = wsName.trim().length > 0 && wsName.trim().length < 3;
+  const wsEmailBad = inviteEmail.trim().length > 0 && !EMAIL_RE.test(inviteEmail.trim());
+  const wsEmailOk = EMAIL_RE.test(inviteEmail.trim());
+  const joinTokenOk = joinToken.trim().length >= 4;
+
   const saveName = async () => {
+    if (wsNameBad) return;
     try {
       await updateWorkspace(wsName.trim());
       setWorkspace({ ...workspace, name: wsName.trim() });
@@ -331,7 +384,7 @@ function WorkspaceSettings({ workspace, notify }) {
   };
 
   const sendInvite = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!wsEmailOk) return;
     setInviteBusy(true); setInviteMsg(""); setInviteErr("");
     try {
       const data = await inviteMember(inviteEmail.trim(), inviteRole);
@@ -347,7 +400,7 @@ function WorkspaceSettings({ workspace, notify }) {
   };
 
   const acceptJoin = async () => {
-    if (!joinToken.trim()) return;
+    if (!joinTokenOk) return;
     setJoinMsg(""); setJoinErr("");
     try {
       await joinWorkspace(joinToken.trim());
@@ -369,9 +422,13 @@ function WorkspaceSettings({ workspace, notify }) {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 18 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <label className="flab">Workspace name<span className="req">*</span></label>
-          <LimitedInput className="finp" maxLength={200} value={wsName} onChange={(e) => setWsName(e.target.value)} placeholder="e.g. Acme Sales" />
+          <LimitedInput className="finp" maxLength={200} value={nameGuard.strip(wsName)} style={redBorder(nameGuard.digitErr)} onChange={(e) => setWsName(nameGuard.strip(e.target.value))} onKeyDown={nameGuard.onKeyDown} placeholder="e.g. Acme Sales" />
+          <FieldHint
+            error={nameGuard.digitErr || null}
+            hint={wsNameBad ? `Minimum 3 characters required — ${3 - wsName.trim().length} more to go` : null}
+          />
         </div>
-        <button className="ps-btn pri" disabled={!wsName.trim() || wsName === workspace?.name} onClick={saveName}>Save</button>
+        <button className="ps-btn pri" disabled={!wsName.trim() || wsNameBad || wsName === workspace?.name} onClick={saveName}>Save</button>
       </div>
 
       {isOwner && (
@@ -380,13 +437,14 @@ function WorkspaceSettings({ workspace, notify }) {
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>Invite teammates</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <LimitedInput className="finp" maxLength={300} placeholder="teammate@company.com" value={inviteEmail} style={redBorder(wsEmailBad)} onChange={(e) => setInviteEmail(e.target.value)} />
+                <FieldHint error={wsEmailBad ? "Enter a valid email address (e.g. teammate@company.com)" : null} />
               </div>
               <select className="fsel" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ maxWidth: 140 }}>
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
               </select>
-              <button className="ps-btn pri" disabled={!inviteEmail.trim() || inviteBusy} onClick={sendInvite}>{inviteBusy ? "Sending…" : "Send invite"}</button>
+              <button className="ps-btn pri" disabled={!wsEmailOk || inviteBusy} onClick={sendInvite}>{inviteBusy ? "Sending…" : "Send invite"}</button>
             </div>
             {inviteMsg && <div style={{ color: "var(--ok)", fontSize: 13, marginTop: 8 }}>{inviteMsg}</div>}
             {inviteErr && <div className="err" style={{ marginTop: 8 }}>{inviteErr}</div>}
@@ -427,8 +485,9 @@ function WorkspaceSettings({ workspace, notify }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <LimitedInput className="finp" maxLength={500} placeholder="Paste invite token here" value={joinToken} onChange={(e) => setJoinToken(e.target.value)} />
+            <FieldHint hint={joinToken.trim().length > 0 && !joinTokenOk ? "Token looks too short — paste the full invite token" : null} />
           </div>
-          <button className="ps-btn ghost" disabled={!joinToken.trim()} onClick={acceptJoin}>Join</button>
+          <button className="ps-btn ghost" disabled={!joinTokenOk} onClick={acceptJoin}>Join</button>
         </div>
         {joinMsg && <div style={{ color: "var(--ok)", fontSize: 13, marginTop: 8 }}>{joinMsg}</div>}
         {joinErr && <div className="err" style={{ marginTop: 8 }}>{joinErr}</div>}
@@ -452,6 +511,16 @@ function IntegrationsSettings({ notify }) {
   const [crmType, setCrmType] = useState("zapier");
   const [crmUrl, setCrmUrl] = useState("");
   const [crmToken, setCrmToken] = useState("");
+  const keyGuard = useDigitGuard();
+
+  /* Live validation */
+  const keyNameBad = newKeyName.trim().length > 0 && newKeyName.trim().length < 3;
+  const whUrlBad = whUrl.trim().length > 0 && !URL_RE.test(whUrl.trim());
+  const whUrlOk = URL_RE.test(whUrl.trim());
+  const whEventList = whEvents.split(",").map((s) => s.trim()).filter(Boolean);
+  const whEventsOk = whEventList.length > 0 && whEventList.every((ev) => /^[a-zA-Z0-9_.-]+$/.test(ev));
+  const crmUrlBad = crmUrl.trim().length > 0 && !URL_RE.test(crmUrl.trim());
+  const crmUrlOk = URL_RE.test(crmUrl.trim());
 
   useEffect(() => {
     loadData();
@@ -464,6 +533,7 @@ function IntegrationsSettings({ notify }) {
   };
 
   const generateKey = async () => {
+    if (keyNameBad) return;
     setLoading(true);
     try {
       const data = await createApiKey(newKeyName || "My API Key");
@@ -490,7 +560,7 @@ function IntegrationsSettings({ notify }) {
   };
 
   const addWebhook = async () => {
-    if (!whUrl.trim()) return;
+    if (!whUrlOk || !whEventsOk) return;
     setLoading(true);
     try {
       await createWebhook({ url: whUrl.trim(), events: whEvents, secret: whSecret || undefined });
@@ -526,7 +596,7 @@ function IntegrationsSettings({ notify }) {
   };
 
   const addCrm = async () => {
-    if (!crmUrl.trim()) return;
+    if (!crmUrlOk) return;
     setLoading(true);
     try {
       await createCrmConnection({ crm_type: crmType, webhook_url: crmUrl.trim(), api_token: crmToken || undefined });
@@ -577,9 +647,13 @@ function IntegrationsSettings({ notify }) {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <LimitedInput className="finp" maxLength={200} placeholder="Key name (e.g. Zapier)" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
+            <LimitedInput className="finp" maxLength={200} placeholder="Key name (e.g. Zapier)" value={keyGuard.strip(newKeyName)} style={redBorder(keyGuard.digitErr)} onChange={(e) => setNewKeyName(keyGuard.strip(e.target.value))} onKeyDown={keyGuard.onKeyDown} />
+            <FieldHint
+              error={keyGuard.digitErr || null}
+              hint={keyNameBad ? `Minimum 3 characters required — ${3 - newKeyName.trim().length} more to go` : null}
+            />
           </div>
-          <button className="ps-btn pri" disabled={loading} onClick={generateKey}>Generate key</button>
+          <button className="ps-btn pri" disabled={loading || keyNameBad} onClick={generateKey}>Generate key</button>
         </div>
       </div>
 
@@ -603,11 +677,15 @@ function IntegrationsSettings({ notify }) {
         )}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <LimitedInput className="finp" maxLength={500} placeholder="https://your-app.com/webhooks/pitch-studio" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
+            <LimitedInput className="finp" maxLength={500} placeholder="https://your-app.com/webhooks/pitch-studio" value={whUrl} style={redBorder(whUrlBad)} onChange={(e) => setWhUrl(e.target.value)} />
+            <FieldHint error={whUrlBad ? "Enter a valid URL starting with https://" : null} />
           </div>
-          <LimitedInput className="finp" maxLength={500} style={{ maxWidth: 180 }} placeholder="Events (comma-separated)" value={whEvents} onChange={(e) => setWhEvents(e.target.value)} />
+          <div>
+            <LimitedInput className="finp" maxLength={500} style={{ maxWidth: 180 }} placeholder="Events (comma-separated)" value={whEvents} onChange={(e) => setWhEvents(e.target.value)} />
+            <FieldHint error={!whEventsOk ? "Use comma-separated event names, e.g. script.completed" : null} />
+          </div>
           <LimitedInput className="finp" maxLength={200} style={{ maxWidth: 140 }} placeholder="Secret (optional)" value={whSecret} onChange={(e) => setWhSecret(e.target.value)} />
-          <button className="ps-btn pri" disabled={loading || !whUrl.trim()} onClick={addWebhook}>Add webhook</button>
+          <button className="ps-btn pri" disabled={loading || !whUrlOk || !whEventsOk} onClick={addWebhook}>Add webhook</button>
         </div>
       </div>
 
@@ -635,10 +713,11 @@ function IntegrationsSettings({ notify }) {
             <option value="custom">Custom webhook</option>
           </select>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <LimitedInput className="finp" maxLength={500} placeholder="https://hooks.zapier.com/... or CRM webhook URL" value={crmUrl} onChange={(e) => setCrmUrl(e.target.value)} />
+            <LimitedInput className="finp" maxLength={500} placeholder="https://hooks.zapier.com/... or CRM webhook URL" value={crmUrl} style={redBorder(crmUrlBad)} onChange={(e) => setCrmUrl(e.target.value)} />
+            <FieldHint error={crmUrlBad ? "Enter a valid URL starting with https://" : null} />
           </div>
           <LimitedInput className="finp" maxLength={500} style={{ maxWidth: 160 }} placeholder="API token (optional)" value={crmToken} onChange={(e) => setCrmToken(e.target.value)} />
-          <button className="ps-btn pri" disabled={loading || !crmUrl.trim()} onClick={addCrm}>Connect</button>
+          <button className="ps-btn pri" disabled={loading || !crmUrlOk} onClick={addCrm}>Connect</button>
         </div>
       </div>
     </>

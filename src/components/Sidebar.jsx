@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Boxes, PlusCircle, Play, FileText, BookOpen, Target, Theater, LayoutGrid, Shield,
   BarChart3, Users, Eye, Star, LayoutTemplate, PenTool, Mic,
-  Trophy, CalendarDays, Lock, Settings, Download,
+  Trophy, CalendarDays, Lock, Settings, Download, Mail,
   Activity, Zap, TrendingUp,
   ChevronRight, PanelLeftClose, PanelLeft, LogOut, HelpCircle, Briefcase, Menu,
   AudioWaveform
@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { id: "products", label: "Products" },
       { id: "studio", label: "Call Studio" },
       { id: "scripts", label: "Scripts" },
+      { id: "followups", label: "Follow-ups" },
     ],
   },
   {
@@ -83,6 +84,7 @@ const ICON_MAP = {
   add: PlusCircle,
   studio: Play,
   scripts: FileText,
+  followups: Mail,
   training: BookOpen,
   practice: Target,
   roleplay: Theater,

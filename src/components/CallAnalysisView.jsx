@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ArrowLeft, FileAudio, History, Loader2, PenLine, Search, X, AudioWaveform } from 'lucide-react'
+import { ArrowLeft, FileAudio, History, Loader2, PenLine, Search, X, AudioWaveform, Mail } from 'lucide-react'
 import AudioUpload from './shared/AudioUpload.jsx'
 import DiarizedTranscript from './shared/DiarizedTranscript.jsx'
 import AnalysisReport from './shared/AnalysisReport.jsx'
 import VoiceRecorder from './shared/VoiceRecorder.jsx'
+import FollowUpModal from './FollowUpModal.jsx'
 import { analyzeCall, listCallAnalyses, getCallAnalysis, listScripts } from '../api/client.js'
 
 const STEPS = {
@@ -37,6 +38,7 @@ export default function CallAnalysisView({ products = [], initialScriptId = null
   const [scripts, setScripts] = useState([])
   const [inputMode, setInputMode] = useState(null) // null | 'audio' | 'type'
   const [typedCall, setTypedCall] = useState('')
+  const [showFollowUp, setShowFollowUp] = useState(false)
 
   // Load scripts and past analyses on mount
   useEffect(() => {
@@ -403,8 +405,23 @@ Customer: Oh hi, yes I was looking for..."
             <button className="ps-btn ghost" onClick={() => { setStep(STEPS.UPLOAD); setTranscriptResult(null); setEditedTranscript(''); setAnalysisResult(null); setInputMode(null); }}>
               ← New Analysis
             </button>
+            <button
+              className="ps-btn pri"
+              onClick={() => setShowFollowUp(true)}
+              disabled={!selectedScriptId}
+              title={selectedScriptId ? 'Draft a follow-up email from the linked script' : 'Select a script (in step 2) to generate a follow-up'}
+            >
+              <Mail size={15} /> Generate Follow-up
+            </button>
           </div>
         </div>
+      )}
+
+      {showFollowUp && selectedScriptId && (
+        <FollowUpModal
+          scriptId={selectedScriptId}
+          onClose={() => setShowFollowUp(false)}
+        />
       )}
     </div>
   )

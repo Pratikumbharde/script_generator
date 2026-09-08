@@ -175,6 +175,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
   const [loading, setLoading] = useState(false);
   const [genProgress, setGenProgress] = useState(null); // { current, total, langName }
   const [checking, setChecking] = useState(true);
+  const [bootstrapping, setBootstrapping] = useState(true); // true until the first saved-script lookup resolves — keeps the form from flashing before a saved script opens
   const [error, setError] = useState("");
   const [streamStage, setStreamStage] = useState(null); // "core" | "objections"
   const [streamStatus, setStreamStatus] = useState("");
@@ -225,6 +226,7 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       setSavedExists(!!saved);
       if (saved && !preset?.setupOnly) setScript(saved.data);
       setChecking(false);
+      setBootstrapping(false);
     })();
     return () => { live = false; };
   }, [key]);
@@ -322,11 +324,29 @@ export default function StudioView({ product, preset, teamLanguages = [], staff 
       onAnalyze={onAnalyze} />;
   }
 
+  // First saved-script lookup in flight — don't flash the setup form before a saved script can take over
+  if (bootstrapping) {
+    return (
+      <div className="ps-container">
+        <div className="ps-top">
+          <div>
+            <div className="ps-eyebrow">Call Studio · {product.name}</div>
+            <div className="ps-title"><Play size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Build your call</div>
+          </div>
+        </div>
+        <div className="ps-card"><div className="loading-box">
+          <div className="ring" />
+          <div className="msg">Checking for a saved script…</div>
+        </div></div>
+      </div>
+    );
+  }
+
   return (
     <div className="ps-container">
       <div className="ps-top">
         <div>
-          <div className="crumb" onClick={onBack}>← Products</div>
+          <div className="crumb" onClick={onBack}>← Back</div>
           <div className="ps-eyebrow">Call Studio · {product.name}</div>
           <div className="ps-title"><Play size={22} style={{ marginRight: 8, verticalAlign: "-3px" }} />Build your call</div>
           <div className="ps-sub">Set the method, audience, and language. Each unique combination is generated once, then saved.</div>

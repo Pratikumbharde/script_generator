@@ -43,10 +43,11 @@ export function AuthProvider({ children }) {
     apiLogout()
     setUser(null)
     setWorkspace(null)
-    // Full reload to the landing page — a soft redirect leaves stale in-memory
-    // state (active view, products, branding) behind; a fresh boot re-runs
-    // auth check, branding fetch and view init from scratch.
-    window.location.replace('/')
+    // Deliberately NO full reload here. Clearing the user unmounts the whole
+    // dashboard (app.jsx renders the landing page whenever !user), so every
+    // view's in-memory state is discarded anyway — a reload added a second
+    // blink (landing → blank → landing) for no benefit. The URL is normalized
+    // to "/" by app.jsx's handleLogout wrapper and the logged-out effect there.
   }
 
   const canGenerate = user?.role === 'admin' || user?.role === 'manager'

@@ -17,6 +17,19 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
+// Behind proxies (Render, Heroku, nginx) — makes req.protocol honor
+// X-Forwarded-Proto, so links built on the server are https in production.
+app.set('trust proxy', 1)
+
+/* Base URL for links embedded in emails / share responses. Prefers the
+   browser's Origin header — in dev that's http://localhost:5174, on the live
+   site it's the live domain — so invite/reset links always point where the
+   user actually browses from. */
+function requestBaseUrl(req) {
+  const origin = req.get('origin')
+  if (origin) return origin.replace(/\/+$/, '')
+  return `${req.protocol}://${req.get('host')}`
+}
 const PORT = process.env.PORT || process.env.SERVER_PORT || 3001
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const OLLAMA_BASE_URL = process.env.OLLAMA_CLOUD_BASE_URL || 'http://localhost:11434'
@@ -976,6 +989,13 @@ addColumnIfNotExists('user_preferences', 'last_digest_sent', 'INTEGER')
 addColumnIfNotExists('scripts', 'sort_order', 'INTEGER DEFAULT 0')
 addColumnIfNotExists('scripts', 'campaign', 'TEXT')
 
+// Follow-up email draft (AI-generated once, then edited by the rep — never
+// auto-regenerated). Timestamps are epoch ms, matching saved_at/used_at.
+addColumnIfNotExists('scripts', 'follow_up_subject', 'TEXT')
+addColumnIfNotExists('scripts', 'follow_up_body', 'TEXT')
+addColumnIfNotExists('scripts', 'follow_up_generated_at', 'INTEGER')
+addColumnIfNotExists('scripts', 'follow_up_updated_at', 'INTEGER')
+
 // P12.1: auto-optimization enhancements (impact scores, evidence, versioning)
 addColumnIfNotExists('auto_optimizations', 'impact_level', "TEXT DEFAULT 'medium' CHECK(impact_level IN ('high','medium','low'))")
 addColumnIfNotExists('auto_optimizations', 'current_text', 'TEXT')
@@ -1134,7 +1154,7 @@ function requireApiKey(req, res, next) {
   const key = header.replace(/^ApiKey\s+/i, '').replace(/^Bearer\s+/i, '')
   if (!key) return res.status(401).json({ error: 'API key required' })
 
-  const hashed = require('crypto').createHash('sha256').update(key).digest('hex')
+  const hashed = crypto.createHash('sha256').update(key).digest('hex')
   const record = db.prepare('SELECT * FROM api_keys WHERE key_hash = ? AND active = 1').get(hashed)
   if (!record) return res.status(401).json({ error: 'Invalid API key' })
 
@@ -1243,7 +1263,7 @@ async function dispatchWebhook(userId, event, payload) {
     const body = JSON.stringify({ event, timestamp: Date.now(), data: payload })
     const headers = { 'Content-Type': 'application/json' }
     if (hook.secret) {
-      const sig = require('crypto').createHmac('sha256', hook.secret).update(body).digest('hex')
+      const sig = crypto.createHmac('sha256', hook.secret).update(body).digest('hex')
       headers['X-Webhook-Signature'] = `sha256=${sig}`
     }
 
@@ -1283,6 +1303,18 @@ app.post('/api/auth/register', (req, res) => {
   // create personal workspace
   const wsResult = db.prepare('INSERT INTO workspaces (name, owner_user_id) VALUES (?, ?)').run(company_name || 'My workspace', userId)
   db.prepare('INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)').run(wsResult.lastInsertRowid, userId, 'owner')
+
+  // Seed the email templates + a preferences row so notifications work from
+  // day one, and send the welcome email (fire-and-forget via system SMTP —
+  // a brand-new user has no SMTP of their own; skip silently when none).
+  seedDefaultTemplates(userId)
+  db.prepare('INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)').run(userId)
+  sendSystemTemplateEmail({
+    userId,
+    to: email,
+    templateSlug: 'user_registration',
+    variables: { user_name: firstName(name || email), company_name: company_name || 'Pitch Studio' },
+  }).catch((err) => console.warn(`[email] welcome to ${email} skipped: ${err.message}`))
 
   const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' })
   res.json({ token, user: { id: userId, email, name: name || '', role: 'member', company_name: company_name || '' } })
@@ -1354,7 +1386,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
   db.prepare('UPDATE users SET reset_token_hash = ?, reset_token_expires = ? WHERE id = ?').run(tokenHash, expires, user.id)
 
-  const origin = req.get('origin') || `${req.protocol}://${req.get('host')}`
+  const origin = requestBaseUrl(req)
   const resetLink = `${origin}/?resetToken=${rawToken}&email=${encodeURIComponent(user.email)}`
 
   const logEmail = (status) =>
@@ -1395,7 +1427,7 @@ app.post('/api/auth/reset-password', (req, res) => {
   if (!token || !email || !password) return res.status(400).json({ error: 'Token, email and new password are required' })
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
-  const user = db.prepare('SELECT id, reset_token_hash, reset_token_expires FROM users WHERE email = ?').get(email)
+  const user = db.prepare('SELECT id, email, company_name, reset_token_hash, reset_token_expires FROM users WHERE email = ?').get(email)
   if (!user || !user.reset_token_hash) return res.status(400).json({ error: 'Invalid or expired reset link' })
   if (!user.reset_token_expires || user.reset_token_expires < Date.now()) {
     return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' })
@@ -1408,6 +1440,14 @@ app.post('/api/auth/reset-password', (req, res) => {
 
   const password_hash = bcrypt.hashSync(password, 10)
   db.prepare('UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_token_expires = NULL WHERE id = ?').run(password_hash, user.id)
+
+  // Security confirmation — fire-and-forget; the reset itself already succeeded.
+  sendSystemTemplateEmail({
+    userId: user.id,
+    to: user.email,
+    templateSlug: 'password_changed',
+    variables: { user_name: firstName(user.email), company_name: user.company_name || 'Pitch Studio' },
+  }).catch((err) => console.warn(`[email] password-changed notice to ${user.email} skipped: ${err.message}`))
 
   res.json({ success: true, message: 'Password updated. You can now sign in.' })
 })
@@ -1486,7 +1526,7 @@ app.put('/api/workspace', requireAuth, (req, res) => {
   res.json({ success: true, name })
 })
 
-app.post('/api/workspace/invite', requireAuth, (req, res) => {
+app.post('/api/workspace/invite', requireAuth, async (req, res) => {
   const { email, role = 'member' } = req.body
   if (!email) return res.status(400).json({ error: 'Email required' })
 
@@ -1498,14 +1538,61 @@ app.post('/api/workspace/invite', requireAuth, (req, res) => {
   ).get(req.userId)
   if (!ws) return res.status(403).json({ error: 'Not allowed' })
 
-  const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
+  const normalizedEmail = String(email).trim().toLowerCase()
+  const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail)
   const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-  db.prepare(
-    'INSERT INTO workspace_members (workspace_id, user_id, role, invited_email, invite_token) VALUES (?, ?, ?, ?, ?)'
-  ).run(ws.id, existingUser?.id || null, role, email, token)
+  /* UNIQUE(workspace_id, user_id) — inviting someone who is already a member
+     or already has a pending invite must update/refresh, never crash. */
+  const existingMember = db.prepare(
+    `SELECT id, joined_at FROM workspace_members
+     WHERE workspace_id = ?
+       AND ((? IS NOT NULL AND user_id = ?) OR LOWER(invited_email) = ?)`
+  ).get(ws.id, existingUser?.id ?? null, existingUser?.id ?? null, normalizedEmail)
+  if (existingMember?.joined_at) {
+    return res.status(409).json({ error: `${normalizedEmail} is already a member of this workspace` })
+  }
+  if (existingMember) {
+    // Pending invite — refresh the token and role, then the email below re-sends.
+    db.prepare('UPDATE workspace_members SET invite_token = ?, role = ?, invited_email = ? WHERE id = ?')
+      .run(token, role, normalizedEmail, existingMember.id)
+  } else {
+    db.prepare(
+      'INSERT INTO workspace_members (workspace_id, user_id, role, invited_email, invite_token) VALUES (?, ?, ?, ?, ?)'
+    ).run(ws.id, existingUser?.id || null, role, normalizedEmail, token)
+  }
 
-  res.json({ success: true, invite_token: token, message: `Invite sent to ${email}` })
+  /* Send the invite email through the inviter's SMTP (Settings → Email).
+     Fire-and-forget: the invite row is already saved, so a mail failure
+     must not fail the request — the token is still shown / paste-able. */
+  const inviter = db.prepare('SELECT email, company_name FROM users WHERE id = ?').get(req.userId)
+  const wsName = db.prepare('SELECT name FROM workspaces WHERE id = ?').get(ws.id)?.name
+  const origin = requestBaseUrl(req)
+  const inviteLink = `${origin}/team?invite=${token}`
+  let emailStatus = 'sent'
+  try {
+    await sendEmail({
+      userId: req.userId,
+      to: normalizedEmail,
+      templateSlug: 'workspace_invite',
+      variables: {
+        invited_name: firstName(normalizedEmail),
+        company_name: inviter?.company_name || wsName || 'our workspace',
+        inviter_name: firstName(inviter?.email),
+        invite_link: inviteLink,
+      },
+    })
+  } catch (err) {
+    emailStatus = err.message?.includes('SMTP not configured') ? 'smtp_missing' : 'failed'
+    console.warn(`[workspace invite] email not sent to ${normalizedEmail}: ${err.message}`)
+  }
+
+  const message = emailStatus === 'sent'
+    ? `Invite sent to ${normalizedEmail}`
+    : emailStatus === 'smtp_missing'
+      ? `Invite created, but no email sent — configure SMTP in Settings → Email, then share this token: ${token}`
+      : `Invite saved, but the email failed — share this token instead: ${token}`
+  res.json({ success: true, invite_token: token, email_sent: emailStatus === 'sent', message })
 })
 
 app.post('/api/workspace/join', requireAuth, (req, res) => {
@@ -1873,6 +1960,163 @@ app.delete('/api/scripts/:id', requireAuth, (req, res) => {
   res.json({ success: true })
 })
 
+/* ---------- follow-up email draft (per script) ----------
+   The draft lives on the script row and is generated ONCE by AI, then edited
+   by the rep. It is never auto-regenerated — only an explicit Regenerate
+   (POST) replaces it. Manual edits (PUT) never fire notifyScriptAlert: a
+   rep editing their own follow-up is not team-worthy news. */
+
+function getFollowUpScript(id, userId) {
+  const existing = db.prepare('SELECT * FROM scripts WHERE id = ?').get(id)
+  if (!existing) return { error: 404, message: 'Not found' }
+  const canAccess = existing.user_id === userId || (
+    existing.visibility === 'workspace' && db.prepare(
+      `SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+       WHERE m.workspace_id = ? AND m.user_id = ? AND m.role IN ('owner','admin') AND m.joined_at IS NOT NULL`
+    ).get(existing.workspace_id, userId)
+  )
+  if (!canAccess) return { error: 403, message: 'Not allowed' }
+  return existing
+}
+
+/* Prospect context for a script — from the most recent scheduled call linked
+   to it. Returns { recipient, prospect_name, prospect_company }. */
+function prospectForScript(scriptId, override = {}) {
+  const call = db.prepare(
+    'SELECT prospect_name, prospect_company, prospect_email FROM scheduled_calls WHERE script_id = ? ORDER BY scheduled_at DESC LIMIT 1'
+  ).get(scriptId)
+  return {
+    recipient: override.prospect_email ?? call?.prospect_email ?? null,
+    prospect_name: override.prospect_name ?? call?.prospect_name ?? null,
+    prospect_company: override.prospect_company ?? call?.prospect_company ?? null,
+  }
+}
+
+app.get('/api/scripts/:id/follow-up', requireAuth, (req, res) => {
+  const existing = getFollowUpScript(req.params.id, req.userId)
+  if (existing.error) return res.status(existing.error).json({ error: existing.message })
+  res.json({
+    subject: existing.follow_up_subject || '',
+    body: existing.follow_up_body || '',
+    generated_at: existing.follow_up_generated_at || null,
+    updated_at: existing.follow_up_updated_at || null,
+    outcome: existing.outcome || 'pending',
+    notes: existing.notes || '',
+    ...prospectForScript(existing.id),
+  })
+})
+
+app.post('/api/scripts/:id/follow-up', requireAuth, async (req, res) => {
+  const existing = getFollowUpScript(req.params.id, req.userId)
+  if (existing.error) return res.status(existing.error).json({ error: existing.message })
+
+  const product = db.prepare('SELECT name, one_liner, description FROM products WHERE id = ?').get(existing.product_id)
+  const prospect = prospectForScript(existing.id, req.body || {})
+
+  // Only proven facts go into the prompt — the AI must never invent content.
+  let segments = []
+  let objections = []
+  try { segments = JSON.parse(existing.segments_json || '[]') || [] } catch { segments = [] }
+  try { objections = JSON.parse(existing.objections_json || '[]') || [] } catch { objections = [] }
+
+  const segLines = segments.map((s, i) => {
+    const parts = [`Segment ${i + 1}: ${s.label || `Phase ${i + 1}`}`]
+    if (s.goal) parts.push(`  Goal: ${s.goal}`)
+    if (Array.isArray(s.say) && s.say.length) parts.push(`  Said: ${s.say.slice(0, 4).join(' | ')}`)
+    if (Array.isArray(s.ask) && s.ask.length) parts.push(`  Asked: ${s.ask.slice(0, 4).join(' | ')}`)
+    return parts.join('\n')
+  }).join('\n')
+
+  const objLines = objections.map((o) => `- Objection: ${o.objection}\n  Response given: ${o.response}`).join('\n')
+
+  const outcomeText = {
+    won: "The call was WON. Confirm what was agreed, sound positive, and reference only next steps explicitly present in the post-call notes.",
+    lost: "The prospect was NOT interested / the deal was lost. Write a short, respectful, no-pressure email that thanks them and leaves the relationship open.",
+    no_deal: "No deal was closed. Write a professional email that keeps the relationship open — recap value gently, no pressure.",
+    pending: "The outcome is unknown. Write a neutral, professional follow-up.",
+  }[existing.outcome || 'pending'] || "Write a neutral, professional follow-up."
+
+  const lang = (existing.language || 'en').toLowerCase()
+  const langText = {
+    en: "Write the email in natural English.",
+    hinglish: "Write the email in natural professional Hinglish (Hindi-English mix written in Latin script) — the way Indian sales reps actually write, not a translation.",
+    hi: "Write the email in natural Hindi (Devanagari script) — fluent, professional Hindi, not a mechanical translation.",
+  }[lang] || `Write the email in natural ${lang} — fluent and professional, not a mechanical translation.`
+
+  const systemPrompt = 'You are an expert sales assistant writing a follow-up email after a sales call. You use ONLY the facts provided and never invent anything. Output ONLY valid JSON with exactly two keys: "subject" and "body".'
+  const userPrompt = [
+    'Write a follow-up email after a sales call, based ONLY on the facts below.',
+    '',
+    `PRODUCT: ${product?.name || 'Unknown product'}${product?.one_liner ? ` — ${product.one_liner}` : ''}`,
+    prospect.prospect_name ? `PROSPECT: ${prospect.prospect_name}${prospect.prospect_company ? ` at ${prospect.prospect_company}` : ''}` : 'PROSPECT: (name unknown — use a generic greeting)',
+    `CALL: ${existing.method || ''} ${existing.call_type || ''} call`.replace(/\s+/g, ' ').trim(),
+    `OUTCOME: ${outcomeText}`,
+    `LANGUAGE: ${langText}`,
+    '',
+    'SCRIPT CONTENT COVERED ON THE CALL:',
+    segLines || '(no script segments available)',
+    objections.length ? `\nOBJECTIONS RAISED & ANSWERED:\n${objLines}` : '',
+    existing.notes ? `\nPOST-CALL NOTES (the only source for anything agreed or any next step):\n${existing.notes}` : '\nPOST-CALL NOTES: (none)',
+    '',
+    'STRICT RULES:',
+    '- Use ONLY the facts above. NEVER invent or mention pricing, discounts, features, meetings, dates, timelines, quotations, demos, commitments, promises, or next steps that are not explicitly present in the POST-CALL NOTES.',
+    '- If the notes contain an agreed next step, mention exactly that next step. If not, close with a neutral invitation (e.g. happy to answer any questions).',
+    '- Keep the body under 180 words, plain text with short paragraphs (\\n line breaks). Greet the prospect by name if known. End with a sign-off like "Best regards, [Your name]".',
+    '- Subject: under 80 characters, specific and honest, no clickbait.',
+    'Return ONLY JSON: {"subject": "...", "body": "..."}',
+  ].join('\n')
+
+  try {
+    const ai = await aiComplete(req.userId, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], { jsonMode: true })
+
+    if (!ai.ok) {
+      return res.status(ai.status).json({ error: 'AI service unavailable — please try again.' })
+    }
+
+    let parsed = {}
+    try {
+      const clean = ai.content.replace(/```json/gi, '').replace(/```/g, '').trim()
+      parsed = parseAIJSON(clean)
+    } catch { parsed = {} }
+
+    const subject = typeof parsed?.subject === 'string' ? parsed.subject.trim() : ''
+    const body = typeof parsed?.body === 'string' ? parsed.body.trim() : ''
+    if (!subject || !body) {
+      // Invalid or empty AI response — do NOT save broken content over a good draft.
+      return res.status(502).json({ error: 'The AI returned an invalid draft. Please try again — your existing draft is unchanged.' })
+    }
+
+    const now = Date.now()
+    db.prepare(
+      'UPDATE scripts SET follow_up_subject = ?, follow_up_body = ?, follow_up_generated_at = ?, follow_up_updated_at = ? WHERE id = ?'
+    ).run(subject, body, now, now, existing.id)
+
+    res.json({ subject, body, recipient: prospect.recipient, generated_at: now, updated_at: now })
+  } catch (err) {
+    console.error('[follow-up] generation failed:', err.message)
+    res.status(500).json({ error: 'Follow-up generation failed. Please try again.' })
+  }
+})
+
+app.put('/api/scripts/:id/follow-up', requireAuth, (req, res) => {
+  const existing = getFollowUpScript(req.params.id, req.userId)
+  if (existing.error) return res.status(existing.error).json({ error: existing.message })
+
+  const { subject, body } = req.body || {}
+  if (typeof subject !== 'string' || typeof body !== 'string' || !subject.trim() || !body.trim()) {
+    return res.status(400).json({ error: 'subject and body are required' })
+  }
+  // Deliberately no notifyScriptAlert — editing your own follow-up draft is not team news.
+  const now = Date.now()
+  db.prepare(
+    'UPDATE scripts SET follow_up_subject = ?, follow_up_body = ?, follow_up_updated_at = ? WHERE id = ?'
+  ).run(subject.trim(), body.trim(), now, existing.id)
+  res.json({ subject: subject.trim(), body: body.trim(), updated_at: now })
+})
+
 /* ---------- components (JWT protected) ---------- */
 app.get('/api/components', requireAuth, (req, res) => {
   const { type } = req.query
@@ -2145,13 +2389,13 @@ app.post('/api/scripts/:id/share', requireAuth, (req, res) => {
   const script = db.prepare('SELECT * FROM scripts WHERE id = ? AND user_id = ?').get(id, req.userId)
   if (!script) return res.status(404).json({ error: 'Script not found' })
 
-  const token = require('crypto').randomBytes(16).toString('hex')
+  const token = crypto.randomBytes(16).toString('hex')
   const expiresAt = Date.now() + (expires_in_days * 86400000)
 
   db.prepare('INSERT INTO script_shares (user_id, script_id, token, expires_at) VALUES (?, ?, ?, ?)')
     .run(req.userId, id, token, expiresAt)
 
-  res.json({ shareUrl: `${req.protocol}://${req.get('host')}/api/s/${token}`, expiresAt })
+  res.json({ shareUrl: `${requestBaseUrl(req)}/api/s/${token}`, expiresAt })
 })
 
 app.get('/api/s/:token', (req, res) => {
@@ -2723,7 +2967,12 @@ async function sendEmail({ userId, to, subject, body, templateSlug, variables })
   let finalSubject = subject || ''
   let finalBody = body || ''
   if (templateSlug) {
-    const tpl = db.prepare('SELECT subject, body FROM email_templates WHERE user_id = ? AND slug = ? AND active = 1').get(userId, templateSlug)
+    let tpl = db.prepare('SELECT subject, body FROM email_templates WHERE user_id = ? AND slug = ? AND active = 1').get(userId, templateSlug)
+    if (!tpl) {
+      // Templates are lazily seeded (first visit to Email Templates) — fall
+      // back to the default copy rather than sending an empty subject/body.
+      tpl = DEFAULT_TEMPLATES.find((t) => t.slug === templateSlug) || null
+    }
     if (tpl) {
       finalSubject = tpl.subject
       finalBody = tpl.body
@@ -2760,6 +3009,34 @@ async function sendEmail({ userId, to, subject, body, templateSlug, variables })
     .run(userId, templateSlug || 'custom', to, finalSubject, finalBody, 'sent')
 
   return info
+}
+
+/* Auth-type emails (welcome, password changed) go to users who have no SMTP
+   of their own yet — send via system SMTP (.env), falling back to the
+   recipient's saved SMTP. Template copy: user's row, else the default seed. */
+async function sendSystemTemplateEmail({ userId, to, templateSlug, variables }) {
+  let transporter = getSystemTransporter()
+  let fromAddr = SMTP_FROM
+  if (!transporter) {
+    const userTransport = getUserTransporter(userId)
+    if (userTransport) {
+      transporter = userTransport.transporter
+      fromAddr = userTransport.from
+    }
+  }
+  if (!transporter) throw new Error('No SMTP configured — set SMTP_* in .env (system) or Settings > Email')
+
+  let tpl = db.prepare('SELECT subject, body FROM email_templates WHERE user_id = ? AND slug = ? AND active = 1').get(userId, templateSlug)
+  if (!tpl) tpl = DEFAULT_TEMPLATES.find((t) => t.slug === templateSlug) || null
+  let subject = tpl?.subject || ''
+  let body = tpl?.body || ''
+  for (const [k, v] of Object.entries(variables || {})) {
+    subject = subject.split(`{{${k}}}`).join(v || '')
+    body = body.split(`{{${k}}}`).join(v || '')
+  }
+  await transporter.sendMail({ from: fromAddr, to, subject, text: body, html: body.replace(/\n/g, '<br />') })
+  db.prepare('INSERT INTO email_logs (user_id, template, to_email, subject, body, status) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, templateSlug, to, subject, body, 'sent')
 }
 
 /* ---------- P6.2: notification dispatchers (script alerts / call reminders / weekly digest) ---------- */
@@ -3061,7 +3338,7 @@ async function dispatchCrm(userId, eventType, payload) {
     for (const conn of connections) {
       try {
         const body = JSON.stringify({ event: eventType, ...payload, source: 'pitch-studio', timestamp: Date.now() })
-        const sig = require('crypto').createHmac('sha256', conn.api_token || 'pitch-default').update(body).digest('hex')
+        const sig = crypto.createHmac('sha256', conn.api_token || 'pitch-default').update(body).digest('hex')
         await fetch(conn.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Pitch-Signature': `sha256=${sig}` },
@@ -3080,8 +3357,8 @@ app.get('/api/api-keys', requireAuth, (req, res) => {
 
 app.post('/api/api-keys', requireAuth, (req, res) => {
   const { name } = req.body
-  const rawKey = 'ps_' + require('crypto').randomBytes(24).toString('hex')
-  const hashed = require('crypto').createHash('sha256').update(rawKey).digest('hex')
+  const rawKey = 'ps_' + crypto.randomBytes(24).toString('hex')
+  const hashed = crypto.createHash('sha256').update(rawKey).digest('hex')
   db.prepare('INSERT INTO api_keys (user_id, key_hash, name) VALUES (?, ?, ?)').run(req.userId, hashed, name || 'API Key')
   res.json({ key: rawKey, name: name || 'API Key', warning: 'This is the only time the key is shown. Copy it now.' })
 })
@@ -3251,16 +3528,28 @@ function getUserChatConfig(req) {
   return getAIConfigForUser(userId)
 }
 
+/* Some thinking models (e.g. glm via Ollama cloud) ignore `think: false` and
+   emit their chain-of-thought inline in `content`, ending with a marker
+   before the real answer. Strip everything up to and including that marker. */
+function stripThinkingPrefix(text) {
+  const s = String(text || '')
+  const idx = s.lastIndexOf('</think>')
+  return idx === -1 ? s : s.slice(idx + '</think>'.length).replace(/^\s+/, '')
+}
+
 function normalizeChatResponse(provider, upstreamData) {
   if (provider === 'openai' || provider === 'deepseek') {
     const content = upstreamData.choices?.[0]?.message?.content || ''
-    return { message: { content } }
+    return { message: { content: stripThinkingPrefix(content) } }
   }
   if (provider === 'anthropic') {
     const content = upstreamData.content?.[0]?.text || ''
-    return { message: { content } }
+    return { message: { content: stripThinkingPrefix(content) } }
   }
   // Ollama or fallback
+  if (upstreamData.message?.content) {
+    upstreamData.message.content = stripThinkingPrefix(upstreamData.message.content)
+  }
   return upstreamData
 }
 
@@ -3306,13 +3595,30 @@ async function fetchAIModel(cfg, messages, stream = false, jsonMode = false) {
   return fetch(url, { method: 'POST', headers, body })
 }
 
+/* Transient upstream failures: the AI cloud occasionally answers a single
+   request with a bare 502/503 HTML error page ("please try again in 30
+   seconds"). Retry those a couple of times with a short backoff instead of
+   failing the user's generation. Safe for streams: the retry decision is
+   made on the response status only, before any body bytes are consumed. */
+const AI_RETRY_STATUSES = new Set([429, 502, 503, 504])
+async function fetchAIModelWithRetry(cfg, messages, stream = false, jsonMode = false, attempts = 3) {
+  let lastRes
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1500 * i)) // 1.5s, then 3s
+    lastRes = await fetchAIModel(cfg, messages, stream, jsonMode)
+    if (lastRes.ok || !AI_RETRY_STATUSES.has(lastRes.status)) return lastRes
+    console.warn(`[AI proxy] Upstream ${lastRes.status} (attempt ${i + 1}/${attempts}) — retrying…`)
+  }
+  return lastRes
+}
+
 /* One-shot completion through the user's primary AI account.
    Returns { ok, status, provider, model, content, data, error }. */
-async function aiComplete(userId, messages, { model = null, stream = false } = {}) {
+async function aiComplete(userId, messages, { model = null, stream = false, jsonMode = false } = {}) {
   const cfg = getAIConfigForUser(userId)
   const useModel = model || cfg.model
   try {
-    const response = await fetchAIModel({ ...cfg, model: useModel }, messages, stream)
+    const response = await fetchAIModelWithRetry({ ...cfg, model: useModel }, messages, stream, jsonMode)
     if (!response.ok) {
       const text = await response.text().catch(() => '')
       return { ok: false, status: response.status, provider: cfg.provider, model: useModel, error: text || `Upstream ${response.status}`, data: null }
@@ -3329,7 +3635,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const cfg = getUserChatConfig(req)
     const { messages, jsonMode } = req.body
-    const response = await fetchAIModel(cfg, messages, false, !!jsonMode)
+    const response = await fetchAIModelWithRetry(cfg, messages, false, !!jsonMode)
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
@@ -3350,7 +3656,7 @@ app.post('/api/chat/stream', requireAuth, async (req, res) => {
   try {
     const cfg = getUserChatConfig(req)
     const { messages, jsonMode } = req.body
-    const response = await fetchAIModel(cfg, messages, true, !!jsonMode)
+    const response = await fetchAIModelWithRetry(cfg, messages, true, !!jsonMode)
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
@@ -4278,7 +4584,7 @@ Give 3-5 specific, actionable suggestions based on the data patterns. If data is
 
     const userContent = `Suggest improvements for ${method || 'sales'} ${call_type || 'call'} scripts${product_name ? ` for ${product_name}` : ''}.`
 
-    const response = await fetchAIModel(cfg, [
+    const response = await fetchAIModelWithRetry(cfg, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ], false)
@@ -5335,7 +5641,7 @@ HARD RULES — violations make the output useless:
 - When there are fewer than 5 outcomes, say plainly in "why" that the data is too thin to measure impact and frame the suggestion as a best-practice change to verify with future calls.
 - If you cannot quote a number from the provided data, you have no number.`
 
-    const response = await fetchAIModel(cfg, [
+    const response = await fetchAIModelWithRetry(cfg, [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Script: ${script?.method || ''} / ${script?.call_type || ''}\nWins: ${winLoss?.wins || 0}, Losses: ${winLoss?.losses || 0}\nCurrent opening: ${firstSegment}` },
     ], false)
@@ -5957,7 +6263,7 @@ async function routeToModel(taskType, messages, preferredModel = null, userId = 
 
   for (const model of uniqueModels) {
     try {
-      const response = await fetchAIModel({ ...cfg, model }, messages, false)
+      const response = await fetchAIModelWithRetry({ ...cfg, model }, messages, false)
 
       if (!response.ok) {
         const text = await response.text().catch(() => '')
@@ -6149,7 +6455,7 @@ app.delete('/api/scripts/:id/assign/:userId', requireAuth, (req, res) => {
 })
 
 // POST /api/team/invite — invite a team member by email
-app.post('/api/team/invite', requireAuth, (req, res) => {
+app.post('/api/team/invite', requireAuth, async (req, res) => {
   const { email, role = 'member', name } = req.body
   if (!email) return res.status(400).json({ error: 'Email required' })
   if (!['manager', 'member'].includes(role)) {
@@ -6167,7 +6473,7 @@ app.post('/api/team/invite', requireAuth, (req, res) => {
   ).get(req.userId)
   if (!ws) return res.status(404).json({ error: 'No workspace found' })
 
-  const token = require('crypto').randomBytes(32).toString('hex')
+  const token = crypto.randomBytes(32).toString('hex')
 
   db.prepare(
     'INSERT INTO team_invitations (workspace_id, email, role, token, invited_by) VALUES (?, ?, ?, ?, ?)'
@@ -6182,8 +6488,35 @@ app.post('/api/team/invite', requireAuth, (req, res) => {
     ).run(ws.id, existingUser.id, wmRole)
   }
 
-  const inviteUrl = `${req.protocol}://${req.get('host')}/invite/${token}`
-  res.json({ success: true, inviteUrl, token, email, role })
+  const inviteUrl = `${requestBaseUrl(req)}/invite/${token}`
+
+  /* Email the invite through the inviter's SMTP (Settings → Email).
+     Fire-and-forget: the invitation row is saved either way; the response
+     reports whether mail actually went out so the UI can suggest sharing
+     the link manually when it didn't. */
+  let emailStatus = 'sent'
+  try {
+    await sendEmail({
+      userId: req.userId,
+      to: email,
+      templateSlug: 'workspace_invite',
+      variables: {
+        invited_name: firstName(email),
+        company_name: currentUser.company_name || 'our workspace',
+        inviter_name: firstName(currentUser.email || req.userEmail),
+        invite_link: inviteUrl,
+      },
+    })
+  } catch (err) {
+    emailStatus = err.message?.includes('SMTP not configured') ? 'smtp_missing' : 'failed'
+    console.warn(`[team invite] email not sent to ${email}: ${err.message}`)
+  }
+  const message = emailStatus === 'sent'
+    ? `Invite sent to ${email}`
+    : emailStatus === 'smtp_missing'
+      ? `Invite created, but no email sent — configure SMTP in Settings → Email, then share this link: ${inviteUrl}`
+      : `Invite saved, but the email failed — share this link instead: ${inviteUrl}`
+  res.json({ success: true, inviteUrl, token, email, role, email_sent: emailStatus === 'sent', message })
 })
 
 // POST /api/team/invite/accept — accept invitation
@@ -6199,7 +6532,7 @@ app.post('/api/team/invite/accept', (req, res) => {
 
   if (!user) {
     // Create a placeholder user account (they'll set password later)
-    const password_hash = bcrypt.hashSync(require('crypto').randomBytes(32).toString('hex'), 10)
+    const password_hash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10)
     const name = invitation.email.split('@')[0]
     const userResult = db.prepare(
       'INSERT INTO users (email, password_hash, company_name, name, role) VALUES (?, ?, ?, ?, ?)'
