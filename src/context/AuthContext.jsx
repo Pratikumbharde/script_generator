@@ -6,7 +6,10 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [workspace, setWorkspace] = useState(null)
-  const [loading, setLoading] = useState(true)
+  // Start with loading=false when there's no token, so logged-out refreshes
+  // render the landing page immediately instead of flashing the dashboard
+  // skeleton for a frame before the auth check runs.
+  const [loading, setLoading] = useState(() => !!localStorage.getItem('ps_token'))
 
   useEffect(() => {
     const token = localStorage.getItem('ps_token')

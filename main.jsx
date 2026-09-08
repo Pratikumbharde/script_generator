@@ -13,6 +13,11 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* Disable the browser's scroll-position restore on reload — it restores the
+   offset against the auth-skeleton layout before the real page renders,
+   leaving the landing page (and views) scrolled partway down on refresh. */
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+
 const root = createRoot(document.getElementById('root'))
 root.render(
   <React.StrictMode>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useLayoutEffect } from 'react'
 import {
   ArrowRight, Check, Zap, Timer, Languages, Shield, BarChart3,
   MessageSquareText, Users, MapPin, Sparkles, Sun, Moon,
@@ -204,6 +204,12 @@ export default function LandingPage({ onSignIn, onRegister }) {
     document.querySelector('.ps-root')?.setAttribute('data-theme', theme)
     try { localStorage.setItem('ps_theme', theme) } catch { /* private mode */ }
   }, [theme])
+
+  // Landing always starts at the top — before first paint so a restored
+  // scroll offset (from the auth-skeleton layout) can never flash through.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
   // Reveal-on-scroll: watch every .lp-reveal element, fade/slide in as it enters the viewport.
   useEffect(() => {
